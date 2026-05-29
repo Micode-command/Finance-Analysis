@@ -172,6 +172,28 @@ def calculate_pr_matrix(df: pd.DataFrame) -> dict:
         s_dev = df['Semi_Relative_Strength_RawDev'].dropna()
         if not s_dev.empty:
             pr['Semi_Relative_Strength_PR'] = s_dev.rank(pct=True).iloc[-1] * 100
+    # === 新增：未來一週大盤（SPY）波動邊界預測模型 ===
+    if 'SPY' in df.columns and 'VIX' in df.columns:
+        current_spy = df['SPY'].iloc[-1]
+        current_vix = df['VIX'].iloc[-1]
+        
+        # 依據統計學年化波動度公式，推算未來 5 個交易日（一週）的 1 個標準差波動幅度
+        # 252 為一年交易日
+        five_day_std_dev_pct = (current_vix / 100) * (5 / 252) ** 0.5
+        
+        # 計算未來一週機率最高（68%機率）的震盪高低標區間
+        pr['Forecast_5D_SPY_High'] = current_spy * (1 + five_day_std_dev_pct)
+        pr['Forecast_5D_SPY_Low'] = current_spy * (1 - five_day_std_dev_pct)
+        
+    # === 新增：馬可夫狀態猜測（未來一週暴風雨指數）===
+    if 'VIX_PR' in pr or ('VIX' in df.columns):
+        vix_pr_val = pr.get('VIX_PR', df['VIX'].rank(pct=True).iloc[-1] * 100)
+        hys_pr_val = pr.get('High_Yield_Spread_PR', 50)
+        semi_pr_val = pr.get('Semi_Relative_Strength_PR', 50)
+        
+        # 簡單量化模型：當恐慌 PR、信用利差 PR、半導體過熱 PR 疊加，計算短線變盤機率
+        storm_score = (vix_pr_val * 0.3) + (hys_pr_val * 0.3) + (semi_pr_val * 0.4)
+        pr['Forecast_5D_Storm_Probability'] = storm_score  # 數值越高，代表未來一週大盤震盪越劇烈
 
     if 'Buffett' in df.columns: 
         buffett = df['Buffett'].dropna()
