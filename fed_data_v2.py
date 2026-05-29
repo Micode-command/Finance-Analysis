@@ -83,27 +83,49 @@ def fetch_fed_data(api_key: str | None = None, years_back: int = 10) -> pd.DataF
     fred_df = pd.concat(dfs, axis=1).sort_index() if dfs else pd.DataFrame()
 
     try:
-        tickers_str = " ".join(YF_TICKERS.values())
-        yf_data = yf.download(tickers_str, period=f"{years_back}y", progress=False)['Close']
-        rename_map = {v: k for k, v in YF_TICKERS.items()}
-        yf_data = yf_data.rename(columns=rename_map)
-        yf_data.index = yf_data.index.tz_localize(None) 
-        
-        if not fred_df.empty:
-            final_df = fred_df.join(yf_data, how='outer').sort_index()
-            return final_df.ffill()
+        # 【重大修正】：改用安全單獨下載防線，徹底擺脫 yfinance 多層索引 (MultiIndex) 剝離失敗的死穴
+        yf_data = pd.DataFrame()
+        for nick_name, official_ticker in YF_TICKERS.items():
+            try:
+                single_yf = yf.download(official_ticker, period=f"{years_back}y", progress=False)
+                if not single_yf.empty:
+                    # 強制抽取 Close 並確保轉為乾淨的單層 Series，排除任何 MultiIndex 雜訊
+                    if 'Close' in single_yf.columns:
+                        s = single_yf['Close']
+                        if isinstance(s, pd.DataFrame): 
+                            s = s.iloc[:, 0]
+                        yf_data[nick_name] = s
+            except Exception as e_single:
+                print(f"⚠️ 抓取單檔 {nick_name} ({official_ticker}) 失敗: {e_single}")
+
+        if not yf_data.empty:
+            yf_data.index = yf_data.index.tz_localize(None) 
+            
+            # 【重大修正】：在跟 FRED 合併前，先在純股票環境中把費半與大盤的相對表現與乖離算乾淨，避免時間差產生的 NaN
+            if 'SOX' in yf_data.columns and 'SPY' in yf_data.columns:
+                sox_spy_ratio = (yf_data['SOX'] / yf_data['SPY']).dropna()
+                if len(sox_spy_ratio) > 120:
+                    ma120_ratio = sox_spy_ratio.rolling(window=120).mean()
+                    dev_ratio = ((sox_spy_ratio - ma120_ratio) / ma120_ratio).dropna()
+                    if not dev_ratio.empty:
+                        # 算好後直接塞進一個獨立的欄位中儲存
+                        yf_data['Semi_Relative_Strength_RawDev'] = dev_ratio
+
+            if not fred_df.empty:
+                final_df = fred_df.join(yf_data, how='outer').sort_index()
+                return final_df.ffill()
+            return yf_data.ffill()
+            
     except Exception as e:
-        print(f"⚠️ 雅虎財經資料抓取失敗: {e}")
+        print(f"⚠️ 雅虎財經整體模組執行失敗: {e}")
         return fred_df.ffill()
 
     return fred_df.ffill()
 
 # ==========================================
-# 2.5 新增：RSS 財經新聞抓取模組
+# 2.5 RSS 財經新聞抓取模組
 # ==========================================
 def fetch_financial_news(limit=5) -> str:
-    """抓取 CNBC 財經頭條 RSS 作為 AI 解盤的時事背景"""
-    # CNBC Finance News RSS (免 API Key，更新即時)
     rss_url = "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10000664"
     news_summary = ""
     try:
@@ -116,7 +138,6 @@ def fetch_financial_news(limit=5) -> str:
             return news_summary
     except Exception as e:
         print(f"⚠️ RSS 新聞抓取失敗: {e}")
-    
     return "[今日國際新聞] 暫時無法取得，請純依據量化數據解盤。\n"
 
 # ==========================================
@@ -143,22 +164,16 @@ def calculate_pr_matrix(df: pd.DataFrame) -> dict:
             if len(s) > 120:
                 ma120 = s.rolling(window=120).mean()
                 dev = ((s - ma120) / ma120).dropna()
-                pr[f"{col}_DevPR"] = dev.rank(pct=True).iloc[-1] * 100
-    # === 新增：費半與標普相對強度乖離指標 (SOX / SPY Ratio Dev PR) ===
-    if 'SOX' in df.columns and 'SPY' in df.columns:
-        # 1. 計算費半相對於 S&P500 的相對表現比值
-        sox_spy_ratio = (df['SOX'] / df['SPY']).dropna()
-        if len(sox_spy_ratio) > 120:
-            # 2. 計算該比值的 120 日移動平均線 (MA120)
-            ma120_ratio = sox_spy_ratio.rolling(window=120).mean()
-            # 3. 計算當前比值相對於 MA120 的乖離率 (Deviation)
-            dev_ratio = ((sox_spy_ratio - ma120_ratio) / ma120_ratio).dropna()
-            # 4. 計算這個乖離率在 10 年歷史中的百分位階 (PR 值)
-            if not dev_ratio.empty:
-                pr['Semi_Relative_Strength_PR'] = dev_ratio.rank(pct=True).iloc[-1] * 100
+                if not dev.empty:
+                    pr[f"{col}_DevPR"] = dev.rank(pct=True).iloc[-1] * 100
 
-    # 模組三：結構估值型 (巴菲特指標 PR)
-    if 'Buffett' in df.columns: # 直接吃前端算好的防呆備用數據
+    # 【重大修正】：直接從抓取端算好的獨立欄位提煉歷史百分位 PR 值，完美避開外來 NaN 的干擾
+    if 'Semi_Relative_Strength_RawDev' in df.columns:
+        s_dev = df['Semi_Relative_Strength_RawDev'].dropna()
+        if not s_dev.empty:
+            pr['Semi_Relative_Strength_PR'] = s_dev.rank(pct=True).iloc[-1] * 100
+
+    if 'Buffett' in df.columns: 
         buffett = df['Buffett'].dropna()
         if not buffett.empty: pr['Buffett_PR'] = buffett.rank(pct=True).iloc[-1] * 100
     elif 'Wilshire_5000' in df.columns and 'US_GDP' in df.columns:
@@ -167,29 +182,19 @@ def calculate_pr_matrix(df: pd.DataFrame) -> dict:
         buffett = (w5000 / gdp).dropna()
         if not buffett.empty: pr['Buffett_PR'] = buffett.rank(pct=True).iloc[-1] * 100
     return pr
+
 # ==========================================
-# 4. AI 機構級立體晨報生成 (加入總經趨勢與攻守解析)
+# 4. AI 機構級立體晨報生成 (雙保險防線自動切換)
 # ==========================================
 def generate_ai_summary(df: pd.DataFrame, api_key: str = None) -> dict:
-    from google import genai
-    from google.genai import types
     key = api_key or os.environ.get("GEMINI_API_KEY")
     if not key: return {"error": "請設定 GEMINI_API_KEY"}
 
     latest = df.iloc[-1]
-    
-    # 1. 呼叫核心量化引擎 (內含原本的所有指標)
     pr = calculate_pr_matrix(df)
     
-    # === 額外手動補強：計算費半與標普的相對表現乖離 PR (防禦萬物 PR99 盲點) ===
-    semi_relative_pr = 50.0  # 預設中位數
-    if 'SOX' in df.columns and 'SPY' in df.columns:
-        sox_spy_ratio = (df['SOX'] / df['SPY']).dropna()
-        if len(sox_spy_ratio) > 120:
-            ma120_ratio = sox_spy_ratio.rolling(window=120).mean()
-            dev_ratio = ((sox_spy_ratio - ma120_ratio) / ma120_ratio).dropna()
-            if not dev_ratio.empty:
-                semi_relative_pr = dev_ratio.rank(pct=True).iloc[-1] * 100
+    # 讀取獨立算好的半導體相對大盤強度 PR，若不存在則給予安全預設值 50.0
+    semi_relative_pr = pr.get('Semi_Relative_Strength_PR', 50.0)
     
     liquidity_roc = df['Liquidity_ROC_4W'].dropna().iloc[-1] if 'Liquidity_ROC_4W' in df.columns else 0
     sahm_val = df['Sahm_Indicator'].dropna().iloc[-1] if 'Sahm_Indicator' in df.columns else 0
@@ -251,7 +256,6 @@ def generate_ai_summary(df: pd.DataFrame, api_key: str = None) -> dict:
     client = genai.Client()
     raw_text = ""
     
-    # 【第一防線】：優先嘗試呼叫 2.5 Pro 旗艦思考模型
     try:
         response = client.models.generate_content(
             model='gemini-2.5-pro',
@@ -260,7 +264,6 @@ def generate_ai_summary(df: pd.DataFrame, api_key: str = None) -> dict:
         )
         raw_text = response.text.strip()
     except Exception as e_pro:
-        # 【第二防線】：萬一 Pro 塞車 (503) 或爆額度 (429)，無縫自動切換到 2.5 Flash 
         print(f"⚠️ Pro 模型暫時不可用 ({e_pro})，正在自動切換至 2.5 Flash 備份防線...")
         try:
             response = client.models.generate_content(
@@ -272,7 +275,6 @@ def generate_ai_summary(df: pd.DataFrame, api_key: str = None) -> dict:
         except Exception as e_flash:
             return {"error": f"大師解盤終極失敗 (Pro & Flash 皆掛點): {e_flash}"}
 
-    # 【第三防線】：JSON 清理防禦
     try:
         if "```json" in raw_text:
             raw_text = raw_text.split("```json")[1].split("```")[0].strip()
