@@ -242,7 +242,7 @@ def render_taiwan_health_score(df: pd.DataFrame, macro_insight: str = ""):
 # ==========================================
 def main():
     import os
-    st.title("🏦 荷儷總經觀測站 (Holly Dashboard)")
+    st.title("🏦 總經觀測站 (Holly Dashboard)")
     st.markdown("專為一般人設計的財富自由導航！打破金融黑話，每日花 1 分鐘看懂全球資金流向與系統風險。")
     
     with st.spinner("⏳ 正在從聯準會與華爾街同步最新數據 (計算 10 年 PR 值中)..."): 

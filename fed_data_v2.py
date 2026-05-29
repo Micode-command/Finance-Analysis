@@ -225,7 +225,7 @@ def generate_ai_summary(df: pd.DataFrame, api_key: str = None) -> dict:
     try:
         client = genai.Client(api_key=key)
         response = client.models.generate_content(
-            model='gemini-2.5-flash',
+            model='gemini-2.5-pro',
             contents=system_prompt + "\n\n" + data_summary,
             config=types.GenerateContentConfig(response_mime_type="application/json")
         )
