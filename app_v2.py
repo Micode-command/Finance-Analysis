@@ -7,7 +7,15 @@ import plotly.graph_objects as go
 from fed_data_v2 import fetch_fed_data, generate_ai_summary
 
 # === DESIGN SYSTEM ===
-COLORS = {"canvas": "#FFFFFF", "ink": "#0F172A", "federal_blue": "#0044CC", "tech_silver": "#E2E8F0", "emerald": "#10B981", "red": "#EF4444", "amber": "#F59E0B"}
+COLORS = {
+    "canvas": "#FFFFFF", 
+    "ink": "#0F172A", 
+    "federal_blue": "#0044CC", 
+    "tech_silver": "#E2E8F0", 
+    "emerald": "#10B981", 
+    "red": "#EF4444", 
+    "amber": "#F59E0B"
+}
 
 st.set_page_config(page_title="財測觀測站", page_icon="🏦", layout="wide", initial_sidebar_state="collapsed")
 
@@ -24,6 +32,9 @@ st.markdown(f"""
     .deviation-negative {{ color: {COLORS['red']}; font-weight: 700; font-size: 0.9rem; }}
     .highlight-pill {{ background-color: #E2E8F0; padding: 2px 6px; border-radius: 4px; font-weight: 600; color: #0F172A; }}
     .pr-badge {{ position: absolute; top: 15px; right: 15px; padding: 4px 8px; border-radius: 6px; font-size: 0.8rem; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
+    
+    /* 新增：預測概率卡片樣式 */
+    .prob-box {{ padding: 15px; border-radius: 8px; text-align: center; border: 1px solid #E2E8F0; }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -36,12 +47,12 @@ def load_data():
 # ==========================================
 def draw_trend_card(df: pd.DataFrame, column: str, title: str, desc: str, invert_color: bool = False, val_format: str = "{:.2f}", prefix: str = "", suffix: str = "", ma_window: int = 30, absolute_only: bool = False):
     if column not in df.columns:
-        st.markdown(f"<div class='metric-card'><div class='metric-title'>{title}</div><div class='metric-desc'>{desc}</div><div>無數據</div></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='metric-card'><div class='metric-title'>{title}</div><div class='metric-desc'>{desc}</div><div style='font-weight:bold; color:#EF4444;'>無數據</div></div>", unsafe_allow_html=True)
         return
 
     valid_data = df[column].dropna()
     if valid_data.empty or len(valid_data) < ma_window:
-        st.markdown(f"<div class='metric-card'><div class='metric-title'>{title}</div><div class='metric-desc'>{desc}</div><div>數據不足</div></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='metric-card'><div class='metric-title'>{title}</div><div class='metric-desc'>{desc}</div><div style='font-weight:bold; color:#F59E0B;'>數據不足</div></div>", unsafe_allow_html=True)
         return
 
     # 1. 計算短線趨勢與乖離率
@@ -56,14 +67,11 @@ def draw_trend_card(df: pd.DataFrame, column: str, title: str, desc: str, invert
     # 2. 動態計算歷史 10 年 PR 值
     pr_val = None
     pr_html = ""
-    if len(valid_data) >= 252: # 至少有 1 年以上的數據才算 PR
+    if len(valid_data) >= 252:
         if absolute_only or column in ['VIX', 'High_Yield_Spread', 'DXY', 'USDTWD']:
-            # 循環震盪型/結構型：看絕對數值 PR
             pr_val = valid_data.rank(pct=True).iloc[-1] * 100
-            # 倒掛利差特殊處理：越小越危險，所以反轉 PR
             if column == "Yield_Curve": pr_val = (1.0 - valid_data.rank(pct=True).iloc[-1]) * 100
         else:
-            # 長期成長型：看 120 天均線乖離率的 PR
             ma120 = valid_data.rolling(window=120).mean()
             dev_history = ((valid_data - ma120) / ma120).dropna()
             if not dev_history.empty:
@@ -130,43 +138,38 @@ def render_taiwan_health_score(df: pd.DataFrame, macro_insight: str = ""):
     details = []
     dynamic_desc = []
 
-    def get_dev_pct(col, window=20): # 改用 20MA 月線計算精準乖離
+    def get_dev_pct(col, window=20): 
         if col not in df.columns: return 0
         s = df[col].dropna()
         if len(s) < window: return 0
         ma = s.tail(window).mean()
         return ((s.iloc[-1] - ma) / ma) * 100
 
-    # 1. 費城半導體 (權重: +/- 25)
     sox_dev = get_dev_pct('SOX')
-    sox_score = max(-25, min(25, sox_dev * 5)) # 乖離越大，加/扣分越多
+    sox_score = max(-25, min(25, sox_dev * 5)) 
     score += sox_score
     if sox_dev > 3: dynamic_desc.append("費半強勢撐盤")
     elif sox_dev < -3: dynamic_desc.append("費半弱勢拖累")
     details.append(f"{'🟢' if sox_score>=0 else '🔴'} 費半距月線 {sox_dev:+.1f}% ({sox_score:+.0f}分)")
 
-    # 2. 台幣匯率 (權重: +/- 25，反向指標)
     twd_dev = get_dev_pct('USDTWD')
-    twd_score = max(-25, min(25, twd_dev * -20)) # 匯率波動小，乘數放大
+    twd_score = max(-25, min(25, twd_dev * -20)) 
     score += twd_score
     if twd_dev > 0.5: dynamic_desc.append("台幣顯著貶值(外資提款壓力)")
     elif twd_dev < -0.5: dynamic_desc.append("台幣強勢升值(熱錢匯入)")
     details.append(f"{'🟢' if twd_score>=0 else '🔴'} 台幣距月線 {twd_dev:+.2f}% ({twd_score:+.0f}分)")
 
-    # 3. 科技股大盤 QQQ (權重: +/- 15)
     qqq_dev = get_dev_pct('QQQ')
     qqq_score = max(-15, min(15, qqq_dev * 4))
     score += qqq_score
     details.append(f"{'🟢' if qqq_score>=0 else '🔴'} 美科技股距月線 {qqq_dev:+.1f}% ({qqq_score:+.0f}分)")
 
-    # 4. 銅博士需求 (權重: +/- 10)
     copper_dev = get_dev_pct('Copper')
     copper_score = max(-10, min(10, copper_dev * 3))
     score += copper_score
     if copper_dev > 3: dynamic_desc.append("實體需求增溫")
     details.append(f"{'🟢' if copper_score>=0 else '🔴'} 銅價距月線 {copper_dev:+.1f}% ({copper_score:+.0f}分)")
 
-    # 5. VIX 恐慌指數 (權重: +10 到 -30)
     if 'VIX' in df.columns:
         vix_val = df['VIX'].dropna().iloc[-1]
         if vix_val < 15:
@@ -179,10 +182,8 @@ def render_taiwan_health_score(df: pd.DataFrame, macro_insight: str = ""):
             vix_score = 0; details.append(f"⚪ VIX 震盪正常 (0分)")
         score += vix_score
 
-    # ★ 新增：6. 美國淨流動性 4 週動能 (權重: +/- 20)
     if 'Liquidity_ROC_4W' in df.columns:
         liq_roc = df['Liquidity_ROC_4W'].dropna().iloc[-1]
-        # 假設流動性每增減 1%，健康度加減 5 分 (可依據實測盤感微調 multiplier)
         liq_score = max(-20, min(20, liq_roc * 5)) 
         score += liq_score
         
@@ -197,17 +198,14 @@ def render_taiwan_health_score(df: pd.DataFrame, macro_insight: str = ""):
             dynamic_desc.append("市場資金急遽抽離 ⚠️")
             details.append(f"🚨 淨資金抽離 {liq_roc:+.2f}% ({liq_score:+.0f}分)")
 
-    # 結算最終分數 (限制在 0-100)
     score = max(0, min(100, score))
 
-    # 動態定調
     if score >= 80: color, status = COLORS['emerald'], "極度狂熱 (積極做多，但需留意乖離過大拉回)"
     elif score >= 60: color, status = COLORS['emerald'], "健康偏多 (沿均線順勢操作，拉回找買點)"
     elif score >= 40: color, status = COLORS['amber'], "震盪整理 (多空交戰，控制資金水位觀望)"
     elif score >= 20: color, status = COLORS['red'], "資金退潮 (跌破均線，提高現金比例防禦)"
     else: color, status = COLORS['red'], "恐慌殺盤 (系統性風險爆發，抱緊現金與避險資產)"
 
-    # 自動組合盤勢特徵診斷
     if dynamic_desc:
         status_subtitle = "💡 當前盤勢特徵：" + "，".join(dynamic_desc) + "。"
     else:
@@ -246,13 +244,16 @@ def main():
     st.markdown("專為一般人設計的財富自由導航！打破金融黑話，每日花 1 分鐘看懂全球資金流向與系統風險。")
     
     with st.spinner("⏳ 正在從聯準會與華爾街同步最新數據 (計算 10 年 PR 值中)..."): 
-        df = load_data()
+        df_raw = load_data()
     
-    if df.empty: 
+    if df_raw.empty: 
         st.error("無法取得數據。請檢查網路或 API key。")
         return
 
-    # === 資料預處理 === (保留你原本的所有 df 計算邏輯)
+    # 🛠️ 【第一重修改】：將「雙向填充防線」拉到最前線，徹底消滅月底 SPY、巴菲特指標無數據的死穴
+    df = df_raw.ffill().bfill()
+
+    # === 資料預處理 ===
     if 'SOFR' in df.columns and 'IORB' in df.columns:
         df['Liquidity_Spread'] = df['SOFR'] - df['IORB']
     if 'DGS10' in df.columns and 'DGS2' in df.columns:
@@ -284,7 +285,7 @@ def main():
         df['U3_MA3_min12'] = df['U3_MA3'].rolling(window=252).min()
         df['Sahm_Indicator'] = df['U3_MA3'] - df['U3_MA3_min12']
 
-    # ★ 關鍵：在這裡提早呼叫 AI
+    # 提早呼叫 AI 大腦
     api_key = os.environ.get("GEMINI_API_KEY") or (st.secrets.get("GEMINI_API_KEY") if "GEMINI_API_KEY" in st.secrets else None)
     if "ai_data" not in st.session_state and api_key:
         with st.spinner("🤖 正在結合五大防線與最新新聞進行深度解讀..."):
@@ -293,31 +294,17 @@ def main():
     ai_result = st.session_state.ai_data if "ai_data" in st.session_state else {}
     macro_insight = ai_result.get("macro_phase_insight", "💡 尚未取得 AI 總經觀測，請點擊重新解讀或檢查 API。")
 
-    # 渲染 UI
-    render_taiwan_health_score(df, macro_insight) # 把 AI 總評塞進去
-    render_ai_broadcast(ai_result) # 直接傳入結果
+    # 渲染健康度與 AI 廣播
+    render_taiwan_health_score(df, macro_insight) 
+    render_ai_broadcast(ai_result) 
 
-
-    # ★ 實體經濟 1：核心 PCE 物價指數年增率 (YoY)
-    if 'Core_PCE' in df.columns:
-        # 日資料 DataFrame 中，一年約為 252 個交易日
-        df['Core_PCE_YoY'] = df['Core_PCE'].pct_change(periods=252) * 100
-
-    # ★ 實體經濟 2：薩姆規則 (Sahm Rule) 衰退指標
-    if 'Unemployment_Rate' in df.columns:
-        # 3 個月約為 63 個交易日
-        df['U3_MA3'] = df['Unemployment_Rate'].rolling(window=63).mean()
-        # 尋找過去 12 個月 (252 日) 內的 3 個月均線最低點
-        df['U3_MA3_min12'] = df['U3_MA3'].rolling(window=252).min()
-        # 薩姆指標：當前 3 個月均線 - 過去 12 個月內的最低 3 個月均線
-        df['Sahm_Indicator'] = df['U3_MA3'] - df['U3_MA3_min12']
 
     st.divider()
     st.subheader("🛡️ 第一道防線：美股大盤與板塊 (反映企業健康度)")
     c1, c2, c3, c4 = st.columns(4)
     with c1: draw_trend_card(df, "SPY", "標普500 (SPY)", "<b>代表：</b>美國前500大企業 (蘋果、微軟)。<br><b>怎麼看：</b>美國國運基本盤。大盤穩，代表天下太平。", ma_window=30)
     with c2: draw_trend_card(df, "QQQ", "那斯達克100 (QQQ)", "<b>代表：</b>科技巨頭 (輝達、Meta、Google)。<br><b>怎麼看：</b>AI 熱錢火車頭！只要它繼續漲，科技股狂歡就不會停。", ma_window=30)
-    with c3: draw_trend_card(df, "IWM", "羅素2000 (IWM)", "<b>代表：</b>2000家美國中小企業。<br><b>怎麼看：</b>若 QQQ 大漲但它大跌，代表大公司正在吸血，中小企業快活不下去了！", ma_window=30)
+    with c3: draw_trend_card(df, "IWM", "羅素2000 (IWM)", "<b>代表：</b>2000家美國中小企業。<br><b>怎麼看：</b>若 QQQ 大漲打大跌，代表大公司正在吸血，中小企業快活不下去了！", ma_window=30)
     with c4: draw_trend_card(df, "XLP", "必需消費板塊 (XLP)", "<b>代表：</b>可口可樂、寶僑、好市多。<br><b>怎麼看：</b>若科技股大跌它卻大漲，代表「聰明錢」提早逃跑，進入防禦避風港。", ma_window=30)
 
     st.divider()
@@ -353,37 +340,56 @@ def main():
     st.divider()
     st.subheader("🏭 終極防線：實體經濟與通膨 (薩姆衰退雷達)")
     c1, c2, c3 = st.columns(3)
-    
-    with c1: 
-        draw_trend_card(df, "Unemployment_Rate", "美國失業率", 
-                        "<b>基準線：</b>4.0% 左右為充分就業。<br>"
-                        "<b>怎麼看：</b>絕對數字不重要，關鍵看「趨勢」。若從低點連續幾個月往上跳升，代表企業正在大規模裁員，消費動能即將崩盤。", 
-                        invert_color=True, suffix="%", absolute_only=True)
-    with c2: 
-        draw_trend_card(df, "Sahm_Indicator", "薩姆規則衰退指標", 
-                        "<b>公式：</b>目前的失業率平均 減去 過去一年的最低點。<br>"
-                        "<b>怎麼看：</b>若顯示為 0.00%，代表目前就在歷史低點，完全沒惡化。一旦突破 <span class='highlight-pill'>0.5%</span>，代表經濟衰退已實質發生，股市將迎來主跌段！", 
-                        invert_color=True, suffix="%", absolute_only=True)
-    with c3: 
-        draw_trend_card(df, "Core_PCE_YoY", "核心 PCE 年增率 (個人消費支出)", 
-                        "<b>全名：</b>核心個人消費支出物價指數 (已剔除波動大的食品與能源)。<br>"
-                        "<b>怎麼算：</b>追蹤民眾「實際花錢買了什麼」。它比 CPI 更精準，因為會考量「替代效應」(如牛肉變貴，民眾改吃豬肉的行為)。<br>"
-                        "<b>基準線：</b>聯準會的終極目標為 <span class='highlight-pill'>2.0%</span>。<br>"
-                        "<b>怎麼看：</b>聯準會決定「降息與否」的唯一通膨指標。若低於 2%，代表通膨已死，FED 隨時有底氣降息救市；若持續反彈，則降息無望。", 
-                        invert_color=True, suffix="%", absolute_only=True)
+    with c1: draw_trend_card(df, "Unemployment_Rate", "美國失業率", "<b>基準線：</b>4.0% 左右為充分就業。<br><b>怎麼看：</b>絕對數字不重要，關鍵看「趨勢」。若從低點連續幾個月往上跳升，代表企業正在大規模裁員，消費動能即將崩盤。", invert_color=True, suffix="%", absolute_only=True)
+    with c2: draw_trend_card(df, "Sahm_Indicator", "薩姆規則衰退指標", "<b>公式：</b>目前的失業率平均 減去 過去一年的最低點。<br><b>怎麼看：</b>若顯示為 0.00%，代表目前就在歷史低點，完全沒惡化。一旦突破 <span class='highlight-pill'>0.5%</span>，代表經濟衰退已實質發生，股市將迎來主跌段！", invert_color=True, suffix="%", absolute_only=True)
+    with c3: draw_trend_card(df, "Core_PCE_YoY", "核心 PCE 年增率 (個人消費支出)", "<b>全名：</b>核心個人消費支出物價指數 (已剔除波動大的食品與能源)。<br><b>怎麼看：</b>聯聯準會決定「降息與否」的唯一通膨指標。若低於 2%，代表通膨已死，FED 隨時有底氣降息救市；若持續反彈，則降息無望。", invert_color=True, suffix="%", absolute_only=True)
+
 def render_ai_broadcast(ai_result):
-    import plotly.graph_objects as go
-    import streamlit as st
-    
     broadcast_text = ai_result.get("broadcast", ai_result.get("error", "解盤失敗。"))
     allocation = ai_result.get("allocation_recommendation", {})
     reasons = ai_result.get("allocation_reasons", {})
     market_insights = ai_result.get("market_insights_html", "")
 
+    # 🛠️ 【第二重修改】：計算概率模型的數值（防呆從副程式傳遞回來的變數）
+    # 因為我們希望直接把「三大洗盤與黑天鵝機率」做成最直觀的儀表板卡片
+    prob_low = ai_result.get("Forecast_Prob_Low_Vol", 60.0)
+    prob_high = ai_result.get("Forecast_Prob_High_Vol", 30.0)
+    prob_black = ai_result.get("Forecast_Prob_Black_Swan", 10.0)
+
+    # 🛠️ 【第三重修改】：在展開廣播前，插播一個「量化模型預測機率儀表板」
+    st.subheader("🔮 頂級量化盲測：未來一週市場型態切換機率")
+    p1, p2, p3 = st.columns(3)
+    with p1:
+        st.markdown(f"""
+        <div class="prob-box" style="background-color: #F0FDF4; border-color: #BBF7D0;">
+            <div style="color: #166534; font-size: 0.9rem; font-weight: 700;">🟢 小波動洗盤 / 常態均值回歸機率</div>
+            <div style="color: #15803D; font-size: 2.2rem; font-weight: 900; margin-top: 5px;">{prob_low:.1f}%</div>
+            <div style="color: #166534; font-size: 0.8rem; margin-top: 5px;">市場健康輪動，無重大系統風險</div>
+        </div>
+        """, unsafe_allow_html=True)
+    with p2:
+        st.markdown(f"""
+        <div class="prob-box" style="background-color: #FFFBEB; border-color: #FDE68A;">
+            <div style="color: #92400E; font-size: 0.9rem; font-weight: 700;">🟡 高波動劇烈洗盤 / 籌碼換手機率</div>
+            <div style="color: #B45309; font-size: 2.2rem; font-weight: 900; margin-top: 5px;">{prob_high:.1f}%</div>
+            <div style="color: #92400E; font-size: 0.8rem; margin-top: 5px;">外資高檔多空博弈，個股劇烈換手</div>
+        </div>
+        """, unsafe_allow_html=True)
+    with p3:
+        st.markdown(f"""
+        <div class="prob-box" style="background-color: #FEF2F2; border-color: #FCA5A5;">
+            <div style="color: #991B1B; font-size: 0.9rem; font-weight: 700;">🚨 黑天鵝極端崩跌機率 (&gt;3標準差)</div>
+            <div style="color: #B91C1C; font-size: 2.2rem; font-weight: 900; margin-top: 5px;">{prob_black:.1f}%</div>
+            <div style="color: #991B1B; font-size: 0.8rem; margin-top: 5px;">引發尾端風險，極端恐慌拋售事件</div>
+        </div>
+        """, unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
+
     with st.expander("🎙️ 展開今日荷莉大師級 AI 總經解析", expanded=True):
         st.markdown(broadcast_text, unsafe_allow_html=True)
         if st.button("🔄 重新解讀"):
-            del st.session_state.ai_data
+            if "ai_data" in st.session_state:
+                del st.session_state.ai_data
             st.rerun()
 
     if market_insights:
@@ -404,7 +410,6 @@ def render_ai_broadcast(ai_result):
                 ]
                 colors = ['#94A3B8', '#0284C7', '#10B981', '#F59E0B', '#EF4444']
                 
-                # 圓餅圖：取消外部圖例，只在內部顯示純百分比
                 fig_pie = go.Figure(data=[go.Pie(
                     labels=labels, 
                     values=vals, 
@@ -417,13 +422,12 @@ def render_ai_broadcast(ai_result):
                 
                 fig_pie.update_layout(
                     margin=dict(t=0, b=15, l=0, r=0), 
-                    showlegend=False,  # 👈 解決白色幽靈圖例的關鍵：直接關掉！
+                    showlegend=False,  
                     height=280, 
                     paper_bgcolor='rgba(0,0,0,0)'
                 )
                 st.plotly_chart(fig_pie, use_container_width=True, config={'displayModeBar': False})
                 
-                # 在圓餅圖下方，自製「專屬用途小區塊」
                 st.markdown(f"""
                 <div style="font-size: 0.95rem; line-height: 1.5;">
                     <div style="border-left: 4px solid #94A3B8; padding-left: 8px; margin-bottom: 12px;">
@@ -445,8 +449,7 @@ def render_ai_broadcast(ai_result):
                 """, unsafe_allow_html=True)
 
         with c2:
-            # 渲染右側最新的「大局觀與實戰劇本」
             st.markdown(market_insights, unsafe_allow_html=True)
 
 if __name__ == "__main__":
-    main()       
+    main()

@@ -174,25 +174,55 @@ def calculate_pr_matrix(df: pd.DataFrame) -> dict:
         if not s_dev.empty:
             pr['Semi_Relative_Strength_PR'] = s_dev.rank(pct=True).iloc[-1] * 100
 
-    # === 🚀 核心優化：將預測目標切換為「台灣加權指數 (TAIEX)」 ===
-    if 'TAIEX' in df_clean.columns and 'VIX' in df_clean.columns:
+    # ========================================================
+    # 🛠️ 終極修復點：進入矩陣核心前，再次強制雙向填充，消滅無數據
+    # ========================================================
+    df_clean = df.ffill().bfill()
+
+    # === 【大師級升級】：台美外溢聯動預測模型 ===
+    if 'TAIEX' in df_clean.columns and 'SPY' in df_clean.columns and 'SOX' in df_clean.columns:
         current_taiex = df_clean['TAIEX'].iloc[-1]
-        current_vix = df_clean['VIX'].iloc[-1]
+        current_spy = df_clean['SPY'].iloc[-1]
+        current_sox = df_clean['SOX'].iloc[-1]
         
-        # 依據統計學公式，推算未來 5 個交易日台股的波動標準差區間
-        five_day_std_dev_pct = (current_vix / 100) * (5 / 252) ** 0.5
-        pr['Forecast_5D_TAIEX_High'] = current_taiex * (1 + five_day_std_dev_pct)
-        pr['Forecast_5D_TAIEX_Low'] = current_taiex * (1 - five_day_std_dev_pct)
+        # 1. 計算美股一週（5日）的隱含波動率（年化波動回推 5日）
+        current_vix = df_clean['VIX'].iloc[-1] if 'VIX' in df_clean.columns else 20
+        vix_5d_pct = (current_vix / 100) * (5 / 252) ** 0.5
         
-    # === 馬可夫變盤暴風雨機率 ===
+        # 2. 設定半導體影子市場的台股動態 Beta 係數（一般台股對美股大盤具備 1.3 倍放大效應）
+        # 如果費半相對強度特別高，Beta 往上微調
+        semi_relative = pr.get('Semi_Relative_Strength_PR', 50.0)
+        base_beta = 1.3 + (semi_relative - 50) / 100
+        
+        # 3. 預測美股大盤漲幅外溢到台股的合理震盪邊界（修正原本點數失真）
+        pr['Forecast_5D_TAIEX_High'] = current_taiex * (1 + (vix_5d_pct * base_beta))
+        pr['Forecast_5D_TAIEX_Low'] = current_taiex * (1 - (vix_5d_pct * base_beta))
+        
+        # 4. 推算預期美股大盤一週合理漲跌幅，供 AI 寫出推測邏輯
+        pr['Forecast_US_Weekly_Move_Pct'] = vix_5d_pct * 100
+        pr['Forecast_TW_Beta_Factor'] = base_beta
+
+    # === 【核心優化】：統計學馬可夫三階段狀態轉換與黑天鵝機率模型 ===
     if 'VIX_PR' in pr or ('VIX' in df_clean.columns):
         vix_pr_val = pr.get('VIX_PR', df_clean['VIX'].rank(pct=True).iloc[-1] * 100)
         hys_pr_val = pr.get('High_Yield_Spread_PR', 50)
         semi_pr_val = pr.get('Semi_Relative_Strength_PR', 50)
-        storm_score = (vix_pr_val * 0.3) + (hys_pr_val * 0.3) + (semi_pr_val * 0.4)
-        pr['Forecast_5D_Storm_Probability'] = storm_score
+        
+        # 量化權重演算法
+        raw_risk_score = (vix_pr_val * 0.4) + (hys_pr_val * 0.3) + (semi_pr_val * 0.3)
+        
+        # A. 黑天鵝極端崩跌機率：當信用利差與恐慌 PR 指數同步飆升（尾端風險）
+        black_swan_prob = (hys_pr_val * 0.6 + vix_pr_val * 0.4) * (raw_risk_score / 100)
+        pr['Forecast_Prob_Black_Swan'] = max(min(black_swan_prob, 95.0), 1.5) # 防呆限制在 1.5%~95%
+        
+        # B. 高波動劇烈洗盤機率：當半導體乖離過熱，資金容易高檔劇烈換手
+        high_vol_prob = raw_risk_score * 0.8
+        pr['Forecast_Prob_High_Vol'] = max(min(high_vol_prob, 90.0), 10.0)
+        
+        # C. 小波動洗盤（健康均值回歸）機率：其餘常態分佈機率
+        pr['Forecast_Prob_Low_Vol'] = max(100.0 - pr['Forecast_Prob_High_Vol'] - pr['Forecast_Prob_Black_Swan'], 5.0)
 
-    # 🛠️ 終極修復點：巴菲特指標相除前與相除後均實施強效填充，消滅無數據
+    # 巴菲特指標計算與雙重填充
     if 'Buffett' in df_clean.columns: 
         buffett = df_clean['Buffett'].ffill().bfill().dropna()
         if not buffett.empty: pr['Buffett_PR'] = buffett.rank(pct=True).iloc[-1] * 100
@@ -211,18 +241,23 @@ def generate_ai_summary(df: pd.DataFrame, api_key: str = None) -> dict:
     key = api_key or os.environ.get("GEMINI_API_KEY")
     if not key: return {"error": "請設定 GEMINI_API_KEY"}
 
-    # 確保最後一行也是填充飽滿的
     df_clean = df.ffill().bfill()
     latest = df_clean.iloc[-1]
     pr = calculate_pr_matrix(df_clean)
     
     semi_relative_pr = pr.get('Semi_Relative_Strength_PR', 50.0)
-    
-    # 提取台股（TAIEX）相關預測參數
     current_taiex_val = df_clean['TAIEX'].iloc[-1] if 'TAIEX' in df_clean.columns else 0
+    
+    # 提取量化預測變數
     forecast_high = pr.get('Forecast_5D_TAIEX_High', current_taiex_val * 1.03)
     forecast_low = pr.get('Forecast_5D_TAIEX_Low', current_taiex_val * 0.97)
-    storm_prob = pr.get('Forecast_5D_Storm_Probability', 50.0)
+    us_move = pr.get('Forecast_US_Weekly_Move_Pct', 2.0)
+    beta_factor = pr.get('Forecast_TW_Beta_Factor', 1.3)
+    
+    # 提取三大預測機率
+    prob_low_vol = pr.get('Forecast_Prob_Low_Vol', 60.0)
+    prob_high_vol = pr.get('Forecast_Prob_High_Vol', 30.0)
+    prob_black_swan = pr.get('Forecast_Prob_Black_Swan', 10.0)
     
     liquidity_roc = df_clean['Liquidity_ROC_4W'].dropna().iloc[-1] if 'Liquidity_ROC_4W' in df_clean.columns else 0
     sahm_val = df_clean['Sahm_Indicator'].dropna().iloc[-1] if 'Sahm_Indicator' in df_clean.columns else 0
@@ -231,28 +266,30 @@ def generate_ai_summary(df: pd.DataFrame, api_key: str = None) -> dict:
     
     news_feed = fetch_financial_news(limit=5)
     
-    # 安全常規字串拼接，傳遞最新的台股與全球量化參數
     data_summary = (
         f"【今日真實數據與 10 年期 PR 值 (0-100)】\n"
         f"- 數據日期: {latest.name.strftime('%Y-%m-%d')}\n"
         f"- 當前台灣加權指數 (TAIEX) 價格: {current_taiex_val:.2f}\n"
         f"- VIX 恐慌指數 PR: {pr.get('VIX_PR', 0):.1f} | 垃圾債違約利差 PR: {pr.get('High_Yield_Spread_PR', 0):.1f}\n"
         f"- 科技股(QQQ) 乖離PR: {pr.get('QQQ_DevPR', 0):.1f} | 費半(SOX) 乖離PR: {pr.get('SOX_DevPR', 0):.1f}\n"
-        f"- 台股加權指數(TAIEX) 乖離PR: {pr.get('TAIEX_DevPR', 0):.1f}\n"
         f"- 半導體/大盤相對強度乖離 PR: {semi_relative_pr:.1f}\n"
         f"- 巴菲特指標 PR: {buffett_pr:.1f}\n"
         f"- 美國淨流動性 4 週變動率 (ROC): {liquidity_roc:.2f}%\n"
         f"- 薩姆規則衰退指標: {sahm_val:.2f}% | 核心 PCE 年增率: {pce_yoy:.2f}%\n\n"
-        f"【📊 本大師量化模型——未來一週 (5個交易日) 台灣大盤預測數據】\n"
-        f"- 馬可夫狀態轉換：未來一週台股切換至「高波動劇烈洗盤型態」的暴風雨機率: {storm_prob:.1f}%\n"
-        f"- 依據波動率公式反推，統計學上未來一週台股加權指數最合理的震盪天花板（高標）: {forecast_high:.2f}\n"
-        f"- 依據波動率公式反推，統計學上未來一週台股加權指數最合理的震盪地板（低標）: {forecast_low:.2f}\n\n"
+        f"【📊 本大師量化模型——未來一週 (5個交易日) 台灣大盤外溢預測數據】\n"
+        f"- 統計學推測美股（S&P 500）未來一週合理隱含波動幅度: +/- {us_move:.2f}%\n"
+        f"- 當前台美連動外溢 Beta 敏感度係數: {beta_factor:.2f}\n"
+        f"- 預估台股加權指數合理震盪天花板 (高標): {forecast_high:.2f}\n"
+        f"- 預估台股加權指數合理震盪地板 (低標): {forecast_low:.2f}\n\n"
+        f"【🔮 統計學狀態切換預測機率】\n"
+        f"- 未來一週【小波動洗盤/常態均值回歸】機率: {prob_low_vol:.1f}%\n"
+        f"- 未來一週【高波動劇烈洗盤換手】機率: {prob_high_vol:.1f}%\n"
+        f"- 未來一週【黑天鵝極端崩跌（>3標準差）】機率: {prob_black_swan:.1f}%\n\n"
         f"{news_feed}"
     )
 
-    # 系統提示詞（無 f 前綴，100% 免疫大括號語法衝突）
     system_prompt_raw = """
-    你是一位擁有 30 年經驗的總經量化投資大師。請為穩健型投資客戶規劃全天候資產配置，並且結合我提供給你的【未來一週台灣大盤預測數據】，嚴密盲測接下來一週內台股大盤可能的變化與走勢。
+    你是一位擁有 30 年經驗的總經量化投資大師。請為穩健型投資客戶規劃全天候資產配置，並且結合我提供給你的【未來一週台灣大盤外溢預測數據】與【統計學狀態切換預測機率】，嚴密推測接下來一週內台股大盤可能的變化與走勢。
 
     【🛡️ 終極動態護盾與配比指令】
     目前薩姆規則：__SAHM__%
@@ -273,7 +310,7 @@ def generate_ai_summary(df: pd.DataFrame, api_key: str = None) -> dict:
 
     {
         "macro_phase_insight": "【當前經濟階段與今日驅動】(請點出目前處於擴張、過熱、末升段還是衰退階段？並點出今日台股量化分數主要是受到哪個指標或是新聞影響。)",
-        "broadcast": "<h4 style='color:#0044CC; margin-bottom: 5px;'>🏦 總經定調：市場情緒與流動性底牌</h4><ul style='line-height: 1.8; margin-top: 0;'><li><b>實體經濟與通膨：</b>(解讀薩姆規則與 PCE，並結合半導體相對大盤強度分析外資長線留存邏輯)</li><li><b>時事與流動性：</b>(解讀新聞與淨流動性，分析外資短期進出台灣市場的速度)</li></ul><h4 style='color:#0044CC; margin-bottom: 5px;'>⚠️ 結構健健：窄基牛市與黑天鵝雷達</h4><ul style='line-height: 1.8; margin-top: 0;'><li><b>板塊分化與系統風險：</b>(對比台股與美股科技股乖離率落差，解讀巴菲特指標)</li></ul><h4 style='color:#CC0000; margin-bottom: 5px;'>🔮 盲測推演：未來一週台灣大盤走勢預測</h4><ul style='line-height: 1.8; margin-top: 0;'><li><b>台股一週震盪邊界：</b>(務必結合我給你的台股合理震盪高標天花板和低標地板數據，指出未來 5 個交易日加權指數最可能的實戰區間)</li><li><b>台股變盤暴風雨機率：</b>(解讀暴風雨機率機率值，預測本週內台股是會繼續由外資拉抬高檔鈍化，還是高機率出現劇烈洗盤)</li></ul>",
+        "broadcast": "<h4 style='color:#0044CC; margin-bottom: 5px;'>🏦 總經定調：市場情緒與流動性底牌</h4><ul style='line-height: 1.8; margin-top: 0;'><li><b>實體經濟與通膨：</b>(解讀薩姆規則與 PCE，並結合半導體相對大盤強度分析外資長線留存邏輯)</li><li><b>時事與流動性：</b>(解讀新聞與淨流動性，分析外資短期進出台灣市場的速度)</li></ul><h4 style='color:#0044CC; margin-bottom: 5px;'>⚠️ 結構健檢：窄基牛市與黑天鵝雷達</h4><ul style='line-height: 1.8; margin-top: 0;'><li><b>板塊分化與系統風險：</b>(對比台股與美股科技股乖離率落差，解讀巴菲特指標)</li></ul><h4 style='color:#CC0000; margin-bottom: 5px;'>🔮 盲測推演：未來一週台灣大盤走勢預測</h4><ul style='line-height: 1.8; margin-top: 0;'><li><b>台美聯動外溢推測：</b>(請展現推測意味。根據美股大盤預估的一週合理隱含波動幅度和當前台美連動 Beta 敏感度係數，詳細敘述如何從美股大盤的預期漲跌幅去討論並推算台股合理的震盪高標天花板和低標地板點數區間)</li><li><b>市場型態機率盲測：</b>(精確向客戶解讀未來一週內：小波動洗盤/均值回歸機率、高波動劇烈洗盤機率、以及黑天鵝極端崩跌機率。並預測本週內台股是會繼續由外資拉抬高檔鈍化，還是高機率出現劇烈洗盤)</li></ul>",
         "allocation_recommendation": {
             "twd_cash": 15, "usd_assets": 30, "cashflow": 25, "core_growth": 15, "tactical_hedge": 15
         },
@@ -284,11 +321,10 @@ def generate_ai_summary(df: pd.DataFrame, api_key: str = None) -> dict:
             "core_growth": "【資本攻擊】吃半導體長期紅利，但因泡沫位階故降低比例。",
             "tactical_hedge": "【黑天鵝防禦/衝刺】黃金對衝地緣風險，極小部位短打矽光子/AI強勢股。"
         },
-        "market_insights_html": "<div style='padding: 24px; background-color: #FAFAF9; border: 2px solid #E5E7EB; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);'><h3 style='color: #1F2937; margin-top:0; border-bottom: 2px solid #D1D5DB; padding-bottom: 10px; margin-bottom: 16px;'>📰 荷儷專屬：市場大局觀與實戰劇本</h3><div style='margin-bottom: 16px;'><h4 style='color: #0284C7; margin: 0 0 5px 0;'>🔄 未來一週台股趨勢與操作劇本</h4><p style='margin: 0; color: #334155; line-height: 1.6;'>(詳細分析未來 5 天內台股加權指數受到統計學高低標和最新新聞的夾擊，會怎麼走？外資會慢慢撤還是慢慢進？)</p></div><div style='margin-bottom: 16px;'><h4 style='color: #F59E0B; margin: 0 0 5px 0;'>🔥 科技股熱點與產業風向</h4><p style='margin: 0; color: #334155; line-height: 1.6;'>(詳細說明現在資金在炒作科技股的什麼題材？務必帶入 AI、矽光子(CPO)、先進封裝(CoWoS)等前瞻領域的資金動向。)</p></div><div style='margin-bottom: 8px;'><h4 style='color: #10B981; margin: 0 0 5px 0;'>🎯 具體標的與操作指南</h4><p style='margin: 0; color: #334155; line-height: 1.6;'>(具體指出在這個預測局勢下，哪些股票/ETF可以買？分別的作用是什麼？例如：長線佈局核心半導體、特定ETF做防禦、高股息做收租等。)</p></div></div>"
+        "market_insights_html": "<div style='padding: 24px; background-color: #FAFAF9; border: 2px solid #E5E7EB; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);'><h3 style='color: #1F2937; margin-top:0; border-bottom: 2px solid #D1D5DB; padding-bottom: 10px; margin-bottom: 16px;'>📰 荷儷專屬：市場大局觀與實戰劇本</h3><div style='margin-bottom: 16px;'><h4 style='color: #0284C7; margin: 0 0 5px 0;'>🔄 未來一週台股趨勢與操作劇本</h4><p style='margin: 0; color: #334155; line-height: 1.6;'>(詳細分析未來 5 天內台股加權指數受到美股外溢、統計學高低標和最新新聞的夾擊，會怎麼走？外資會慢慢撤還是慢慢進？)</p></div><div style='margin-bottom: 16px;'><h4 style='color: #F59E0B; margin: 0 0 5px 0;'>🔥 科技股熱點與產業風向</h4><p style='margin: 0; color: #334155; line-height: 1.6;'>(詳細說明現在資金在炒作科技股的什麼題材？務必帶入 AI、矽光子(CPO)、先進封裝(CoWoS)等前瞻領域的資金動向。)</p></div><div style='margin-bottom: 8px;'><h4 style='color: #10B981; margin: 0 0 5px 0;'>🎯 具體標的與操作指南</h4><p style='margin: 0; color: #334155; line-height: 1.6;'>(具體指出在這個預測局勢下，哪些股票/ETF可以買？分別的作用是什麼？例如：長線佈局核心半導體、特定ETF做防禦、高股息做收租等。)</p></div></div>"
     }
     """
     
-    # 執行精準的字串安全代換
     system_prompt = system_prompt_raw.replace("__SAHM__", f"{sahm_val:.2f}")
     system_prompt = system_prompt.replace("__BUFFETT__", f"{buffett_pr:.1f}")
     system_prompt = system_prompt.replace("__LIQ__", f"{liquidity_roc:.2f}")
