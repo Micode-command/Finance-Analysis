@@ -223,14 +223,25 @@ def generate_ai_summary(df: pd.DataFrame, api_key: str = None) -> dict:
     """
     
     try:
-        client = genai.Client(api_key=key)
+        # 修正 Client 初始化語法
+        client = genai.Client() 
+        
         response = client.models.generate_content(
             model='gemini-2.5-pro',
             contents=system_prompt + "\n\n" + data_summary,
-            config=types.GenerateContentConfig(response_mime_type="application/json")
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                temperature=0.2 # 降低隨機性，強迫它嚴格遵循 JSON 格式
+            )
         )
-        raw_text = response.text.strip().strip("`").strip()
-        if raw_text.startswith("json"): raw_text = raw_text[4:].strip()
+        raw_text = response.text.strip()
+        
+        # 移除可能夾帶的 Markdown 標籤防線
+        if raw_text.startswith("```json"):
+            raw_text = raw_text.split("```json")[1].split("```")[0].strip()
+        elif raw_text.startswith("```"):
+            raw_text = raw_text.split("```")[1].split("```")[0].strip()
+            
         return json.loads(raw_text, strict=False)
     except Exception as e:
         return {"error": f"大師解盤失敗: {e}"}

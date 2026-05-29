@@ -4,4 +4,4 @@ plotly
 requests
 yfinance
 feedparser
-google-generativeai
+google-genai

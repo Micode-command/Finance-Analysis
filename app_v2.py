@@ -388,7 +388,7 @@ def render_ai_broadcast(ai_result):
 
     if market_insights:
         st.markdown("<br>", unsafe_allow_html=True)
-        st.subheader("🛡️ 荷儷家族專屬：今日目標資金配置與實戰劇本")
+        st.subheader("🛡️ 財富自由專屬：今日目標資金配置與實戰劇本")
         
         c1, c2 = st.columns([1, 1.8])
         
