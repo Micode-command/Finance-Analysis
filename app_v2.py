@@ -242,7 +242,7 @@ def render_taiwan_health_score(df: pd.DataFrame, macro_insight: str = ""):
 # ==========================================
 def main():
     import os
-    st.title("🏦 總經觀測站 (Holly Dashboard)")
+    st.title("🏦 荷莉總經觀測站 (Holly Dashboard)")
     st.markdown("專為一般人設計的財富自由導航！打破金融黑話，每日花 1 分鐘看懂全球資金流向與系統風險。")
     
     with st.spinner("⏳ 正在從聯準會與華爾街同步最新數據 (計算 10 年 PR 值中)..."): 
@@ -380,7 +380,7 @@ def render_ai_broadcast(ai_result):
     reasons = ai_result.get("allocation_reasons", {})
     market_insights = ai_result.get("market_insights_html", "")
 
-    with st.expander("🎙️ 展開今日大師級 AI 總經解析", expanded=True):
+    with st.expander("🎙️ 展開今日荷莉大師級 AI 總經解析", expanded=True):
         st.markdown(broadcast_text, unsafe_allow_html=True)
         if st.button("🔄 重新解讀"):
             del st.session_state.ai_data
@@ -388,7 +388,7 @@ def render_ai_broadcast(ai_result):
 
     if market_insights:
         st.markdown("<br>", unsafe_allow_html=True)
-        st.subheader("🛡️ 財富自由專屬：今日目標資金配置與實戰劇本")
+        st.subheader("🛡️ 財富穩健自由專屬：今日目標資金配置與實戰劇本")
         
         c1, c2 = st.columns([1, 1.8])
         
