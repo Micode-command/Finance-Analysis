@@ -407,8 +407,6 @@ def main():
 
     render_taiwan_health_score(df, macro_insight) 
     render_ai_broadcast(ai_result) 
-    render_taiwan_health_score(df, macro_insight) 
-    render_ai_broadcast(ai_result) 
     render_bottom_fishing_signals(df)  # 🟢 呼叫剛做好的四大抄底信號模組
 
     st.divider()
