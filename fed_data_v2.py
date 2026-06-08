@@ -19,9 +19,11 @@ FRED_SERIES = {
     "Reserve_Balances": ("WRESBAL", False),     
     "TGA_Account": ("WDTGAL", False),           
     "IORB": ("IORB", False),                    
-    "SOFR": ("SOFR", False),                    
+    "SOFR": ("SOFR", False), 
+    "DGS30": ("DGS30", False),                # 🟢 新增：30年期美債
     "DGS10": ("DGS10", False),                  
     "DGS2": ("DGS2", False),
+    "CPI": ("CPIAUCSL", False),               # 🟢 新增：廣義 CPI (通膨之母)
     "Core_PCE": ("PCEPILFE", False),        
     "Unemployment_Rate": ("UNRATE", False), 
     "High_Yield_Spread": ("BAMLH0A0HYM2", False),
@@ -33,8 +35,7 @@ YF_TICKERS = {
     "SPY": "SPY", "QQQ": "QQQ", "IWM": "IWM", "XLP": "XLP",
     "SOX": "^SOX", "VIX": "^VIX", "DXY": "DX-Y.NYB",
     "USDJPY": "JPY=X", "USDTWD": "TWD=X",
-    "WTI": "CL=F", "Gold": "GC=F", "Copper": "HG=F",
-    "TAIEX": "^TWII"
+    "WTI": "CL=F", "Brent": "BZ=F", "Gold": "GC=F", "Copper": "HG=F" # 🟢 新增：布倫特原油 (BZ=F)
 }
 
 FRED_OBS_URL = "https://api.stlouisfed.org/fred/series/observations"
