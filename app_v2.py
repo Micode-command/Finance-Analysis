@@ -390,10 +390,10 @@ def main():
     st.divider()
     st.subheader("⚡ 戰術雷達：高頻微觀與籌碼動能 (一週變盤雷達)")
     t1, t2, t3 = st.columns(3)
-    with t1: draw_trend_card(df, "USDTWD_ROC_5D", "台幣 5 日動能 (外資生死線)", "外資匯出匯入的超短期溫度計。<br><span style='color:#0284C7;'><b>💡：</b>大於 +0.5% (台幣急貶) 代表外資正在瘋狂撤資逃命；小於 -0.5% 代表熱錢湧入台灣準備炒股。</span>", invert_color=True, suffix="%", ma_window=20, absolute_only=True)
-    with t2: draw_trend_card(df, "HY_Spread_Chg_5D", "垃圾債利差 5 日變化", "華爾街銀行借錢意願的短期指標。<br><span style='color:#0284C7;'><b>💡：</b>數字大於0 (正數) 代表銀行在雨天收傘，體質差的公司借不到錢，股市隨時有連環爆雷風險。</span>", invert_color=True, suffix="%", ma_window=20, absolute_only=True)
-    with t3: draw_trend_card(df, "VIX_Dev_20D", "VIX 距月線乖離 (情緒偏斜)", "短期恐慌與貪婪的極端值。<br><span style='color:#0284C7;'><b>💡：</b>大於 +15% 代表市場嚇壞了(通常是短線買點)；小於 -15% 代表大家過度樂觀，準備要被割韭菜了。</span>", invert_color=True, suffix="%", ma_window=20, absolute_only=True)
-
+    with t1: draw_trend_card(df, "USDTWD_ROC_5D", "台幣 5 日動能 (外資生死線)", "外資匯出匯入的超短期溫度計。<br><span style='color:#0284C7;'><b>💡：</b>大於 +0.5% (台幣急貶) 代表外資正在瘋狂撤資逃命；小於 -0.5% 代表熱錢湧入台灣準備炒股。</span>", invert_color=True, suffix="%", ma_window=20, pr_type='C')
+    with t2: draw_trend_card(df, "HY_Spread_Chg_5D", "垃圾債利差 5 日變化", "華爾街銀行借錢意願的短期指標。<br><span style='color:#0284C7;'><b>💡：</b>數字大於0 (正數) 代表銀行在雨天收傘，體質差的公司借不到錢，股市隨時有連環爆雷風險。</span>", invert_color=True, suffix="%", ma_window=20, pr_type='C')
+    with t3: draw_trend_card(df, "VIX_Dev_20D", "VIX 距月線乖離 (情緒偏斜)", "短期恐慌與貪婪的極端值。<br><span style='color:#0284C7;'><b>💡：</b>大於 +15% 代表市場嚇壞了(通常是短線買點)；小於 -15% 代表大家過度樂觀，準備要被割韭菜了。</span>", invert_color=True, suffix="%", ma_window=20, pr_type='C')
+    
     st.divider()
     st.subheader("🔥 賽道擁擠度與泡沫雷達 (半導體過熱警報)")
     c1, c2 = st.columns(2)
@@ -401,13 +401,13 @@ def main():
         draw_trend_card(
             df, "SMH_Dev_200D", "半導體 200 日乖離 (散戶 FOMO 指標)", 
             "衡量晶片股是否漲到脫離基本面。<br><span style='color:#0284C7;'><b>💡：</b>當乖離率大於 +30% (線圖飆高)，代表散戶已經陷入 FOMO 瘋狂追高，隨時可能觸發『達康泡沫』等級的殺盤；小於 -15% 才是長線無腦買點。</span>", 
-            invert_color=True, suffix="%", ma_window=60, absolute_only=True
+            invert_color=True, suffix="%", ma_window=60, pr_type='G'
         )
     with c2: 
         draw_trend_card(
-            df, "SMH_Relative_Strength", "半導體資金虹吸度 (SMH/SPY 相對強度)", 
+            df, "SMH_Relative_Strength", "半導體資金虹急度 (SMH/SPY 相對強度)", 
             "衡量半導體是否吸乾了全市場的錢。<br><span style='color:#0284C7;'><b>💡：</b>當這個數值急速飆破 +10%，代表全市場的錢像被『黑洞』吸走一樣只炒半導體。這是不健康的單腳跳，通常是大戶準備『獲利了結、資金撤退』的最後警告。</span>", 
-            invert_color=True, suffix="%", ma_window=60, absolute_only=True
+            invert_color=True, suffix="%", ma_window=60, pr_type='G'
         )
 
     st.divider()
@@ -455,6 +455,6 @@ def main():
     with c1: draw_trend_card(df, "Unemployment_Rate", "美國失業率", "<div style='font-size:0.8rem; line-height:1.5;'><b>🧮 公式：</b>勞動市場健康度。<br><b>📊 閾值：</b>形成明顯上升趨勢即不妙。<br><b>⚔️ 連動：</b>一旦狂飆，代表民眾無力消費，此時就算降息也救不回獲利衰退的殺盤。</div>", invert_color=True, suffix="%", pr_type='C')
     with c2: draw_trend_card(df, "Sahm_Indicator", "薩姆衰退指標", "<div style='font-size:0.8rem; line-height:1.5;'><b>🧮 公式：</b>失業率3個月均值與前低比較。<br><b>📊 閾值：</b>> 0.5% 即宣告 100% 衰退。<br><b>⚔️ 連動：</b>史上最神準警報。一旦觸發，代表經濟陷入硬著陸，風險資產將遭遇拋售。</div>", invert_color=True, suffix="%", pr_type='C')
     with c3: draw_trend_card(df, "Core_PCE_YoY", "核心 PCE 年增率", "<div style='font-size:0.8rem; line-height:1.5;'><b>🧮 公式：</b>扣除能源食物的真實通膨。<br><b>📊 閾值：</b>黏性極強，降至 2% 才安全。<br><b>⚔️ 連動：</b>聯準會決策的唯一核心，此數值不降，大資金就不敢定價寬鬆週期。</div>", invert_color=True, suffix="%", pr_type='C')
-    
+
 if __name__ == "__main__":
     main()
