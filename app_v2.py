@@ -18,17 +18,23 @@ st.markdown(f"""
     .stApp {{ background-color: {COLORS['canvas']}; }}
     * {{ font-family: 'Inter', sans-serif; color: {COLORS['ink']}; }}
     .metric-card {{ background-color: #F8FAFC; border: 1px solid {COLORS['tech_silver']}; padding: 15px; border-radius: 8px; height: 100%; display: flex; flex-direction: column; justify-content: space-between; position: relative; }}
-    .metric-title {{ font-size: 1.1rem; font-weight: 800; color: {COLORS['federal_blue']}; margin-bottom: 8px; padding-right: 60px; }}
-    .metric-desc {{ font-size: 0.85rem; color: #475569; margin-bottom: 12px; line-height: 1.5; flex-grow: 1; }}
+    .metric-title {{ font-size: 1.05rem; font-weight: 900; color: {COLORS['federal_blue']}; margin-bottom: 6px; padding-right: 60px; }}
+    .metric-desc {{ font-size: 0.8rem; color: #475569; margin-bottom: 12px; line-height: 1.6; flex-grow: 1; }}
     .metric-value {{ font-size: 1.6rem; font-weight: 800; }}
     .metric-date {{ font-size: 0.75rem; color: #94A3B8; margin-bottom: 5px; }}
     .deviation-positive {{ color: {COLORS['emerald']}; font-weight: 700; font-size: 0.9rem; }}
     .deviation-negative {{ color: {COLORS['red']}; font-weight: 700; font-size: 0.9rem; }}
     .highlight-pill {{ background-color: #E2E8F0; padding: 2px 6px; border-radius: 4px; font-weight: 600; color: #0F172A; }}
     .pr-badge {{ position: absolute; top: 15px; right: 15px; padding: 4px 8px; border-radius: 6px; font-size: 0.8rem; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
-    .prob-box {{ padding: 15px; border-radius: 8px; text-align: center; border: 1px solid #E2E8F0; }}
 </style>
 """, unsafe_allow_html=True)
+
+# 增加一個側邊欄按鈕來手動清除快取
+with st.sidebar:
+    st.markdown("### 🛠️ 系統維護")
+    if st.button("🧹 清除數據快取 (強制重新抓取)"):
+        st.cache_data.clear()
+        st.success("快取已清除！請重整網頁。")
 
 @st.cache_data(ttl=3600)
 def load_data(): 
@@ -36,7 +42,7 @@ def load_data():
 
 def draw_trend_card(df: pd.DataFrame, column: str, title: str, desc: str, invert_color: bool = False, val_format: str = "{:.2f}", prefix: str = "", suffix: str = "", ma_window: int = 30, absolute_only: bool = False):
     if column not in df.columns:
-        st.markdown(f"<div class='metric-card'><div class='metric-title'>{title}</div><div class='metric-desc'>{desc}</div><div style='font-weight:bold; color:#EF4444;'>無數據</div></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='metric-card'><div class='metric-title'>{title}</div><div class='metric-desc'>{desc}</div><div style='font-weight:bold; color:#EF4444;'>無數據 (請點左側邊欄清除快取)</div></div>", unsafe_allow_html=True)
         return
 
     valid_data = df[column].dropna()
@@ -143,7 +149,7 @@ def render_taiwan_health_score(df: pd.DataFrame, macro_insight: str = ""):
     qqq_dev = get_dev_pct('QQQ')
     qqq_score = max(-15, min(15, qqq_dev * 4))
     score += qqq_score
-    details.append(f"{'🟢' if qqq_score>=0 else '🔴'} 美科技股距月線 {qqq_dev:+.1f}% ({qqq_score:+.0f}分)")
+    details.append(f"{'🟢' if qqq_score>=0 else '🔴'} 科技股距月線 {qqq_dev:+.1f}% ({qqq_score:+.0f}分)")
 
     copper_dev = get_dev_pct('Copper')
     copper_score = max(-10, min(10, copper_dev * 3))
@@ -162,22 +168,6 @@ def render_taiwan_health_score(df: pd.DataFrame, macro_insight: str = ""):
         else:
             vix_score = 0; details.append(f"⚪ VIX 震盪正常 (0分)")
         score += vix_score
-
-    if 'Liquidity_ROC_4W' in df.columns:
-        liq_roc = df['Liquidity_ROC_4W'].dropna().iloc[-1]
-        liq_score = max(-20, min(20, liq_roc * 5)) 
-        score += liq_score
-        
-        if liq_roc > 2:
-            dynamic_desc.append("聯準會資金強烈擴張")
-            details.append(f"🟢 淨資金擴張 {liq_roc:+.2f}% ({liq_score:+.0f}分)")
-        elif liq_roc > 0:
-            details.append(f"🟢 淨資金注水 {liq_roc:+.2f}% ({liq_score:+.0f}分)")
-        elif liq_roc > -2:
-            details.append(f"🔴 淨資金收水 {liq_roc:+.2f}% ({liq_score:+.0f}分)")
-        else:
-            dynamic_desc.append("市場資金抽離")
-            details.append(f"🚨 淨資金抽離 {liq_roc:+.2f}% ({liq_score:+.0f}分)")
 
     score = max(0, min(100, score))
 
@@ -252,7 +242,7 @@ def render_ai_broadcast(ai_result):
 def render_bottom_fishing_signals(df):
     st.divider()
     st.subheader("🚦 機構級抄底/逃頂：四大長線買入確認信號")
-    st.markdown("當以下 **4 個條件滿足 3 個以上**時，代表系統性風險解除，是重新大舉買入長期風險資產的歷史級時刻。")
+    st.markdown("當以下 **4 個條件滿足 3 個以上**時，代表市場系統性風險解除，是散戶跟著華爾街大戶『重新大舉買入股票與長債』的歷史級時刻。")
     
     brent_val = df['Brent'].dropna().iloc[-1] if 'Brent' in df.columns else 100.0
     cpi_yoy = df['CPI_YoY'].dropna().iloc[-1] if 'CPI_YoY' in df.columns else 5.0
@@ -269,41 +259,51 @@ def render_bottom_fishing_signals(df):
     
     signals_met = sum([cond_1, cond_2, cond_3, cond_4])
     
-    def get_card_html(title, current_val, target, is_met, unit="", reverse=False):
+    def get_card_html(title, current_val, target, is_met, desc, unit=""):
         bg_color = "#ECFDF5" if is_met else "#F8FAFC"
         border_color = "#10B981" if is_met else "#CBD5E1"
         icon = "✅" if is_met else "⏳"
         status_color = "#059669" if is_met else "#64748B"
         return f"""
-        <div style="background-color: {bg_color}; border: 2px solid {border_color}; border-radius: 8px; padding: 15px; text-align: center; height: 100%;">
-            <div style="font-size: 1.5rem; margin-bottom: 5px;">{icon}</div>
-            <div style="font-weight: 800; color: #0F172A; font-size: 1.05rem;">{title}</div>
-            <div style="margin-top: 8px; font-size: 0.9rem; color: #475569;">目標: <span style="font-weight:bold;">{target}</span></div>
-            <div style="margin-top: 5px; font-size: 1.2rem; font-weight: 900; color: {status_color};">當前: {current_val:.2f}{unit}</div>
+        <div style="background-color: {bg_color}; border: 2px solid {border_color}; border-radius: 8px; padding: 15px; text-align: center; height: 100%; display: flex; flex-direction: column; justify-content: space-between;">
+            <div>
+                <div style="font-size: 1.5rem; margin-bottom: 5px;">{icon}</div>
+                <div style="font-weight: 900; color: #0F172A; font-size: 1.05rem;">{title}</div>
+                <div style="margin-top: 8px; font-size: 0.9rem; color: #475569;">目標: <span style="font-weight:bold;">{target}</span></div>
+                <div style="margin-top: 5px; font-size: 1.2rem; font-weight: 900; color: {status_color};">當前: {current_val:.2f}{unit}</div>
+            </div>
+            <div style="margin-top: 12px; font-size: 0.8rem; color: #334155; text-align: left; background-color: rgba(255,255,255,0.6); padding: 8px; border-radius: 6px;">
+                <b>💡 白話文：</b>{desc}
+            </div>
         </div>
         """
 
     c1, c2, c3, c4 = st.columns(4)
-    with c1: st.markdown(get_card_html("1. 原油解除通膨警報", brent_val, "< $90", cond_1, "$"), unsafe_allow_html=True)
-    with c2: st.markdown(get_card_html("2. 廣義 CPI 實質降溫", cpi_yoy, "< 2.5%", cond_2, "%"), unsafe_allow_html=True)
-    with c3: st.markdown(get_card_html("3. 10年期美債殖利率回落", dgs10_val, "< 4.3%", cond_3, "%"), unsafe_allow_html=True)
+    with c1: st.markdown(get_card_html("1. 原油解除通膨警報", brent_val, "< $90", cond_1, "油價是萬物齊漲的源頭。跌破90元代表通膨惡夢結束，聯準會才有底氣印鈔票救市。", "$"), unsafe_allow_html=True)
+    with c2: st.markdown(get_card_html("2. 廣義 CPI 實質降溫", cpi_yoy, "< 2.5%", cond_2, "官方物價漲幅達標。代表聯準會不再需要用『高利率』來壓榨實體經濟，資金準備解放。", "%"), unsafe_allow_html=True)
+    with c3: st.markdown(get_card_html("3. 10年期美債殖利率回落", dgs10_val, "< 4.3%", cond_3, "全球資金的借款成本變便宜了！這會讓大公司的還款壓力大減，科技股估值準備往上衝。", "%"), unsafe_allow_html=True)
     with c4: 
-        status_text = "已定價降息" if cond_4 else "緊縮/高位震盪"
+        status_text = "已定價降息" if cond_4 else "緊縮震盪中"
         bg_color = "#ECFDF5" if cond_4 else "#F8FAFC"
         border_color = "#10B981" if cond_4 else "#CBD5E1"
         st.markdown(f"""
-        <div style="background-color: {bg_color}; border: 2px solid {border_color}; border-radius: 8px; padding: 15px; text-align: center; height: 100%;">
-            <div style="font-size: 1.5rem; margin-bottom: 5px;">{'✅' if cond_4 else '⏳'}</div>
-            <div style="font-weight: 800; color: #0F172A; font-size: 1.05rem;">4. 聯準會降息信號發出</div>
-            <div style="margin-top: 8px; font-size: 0.9rem; color: #475569;">量化標準: <span style="font-weight:bold;">2年債 < 基準利率1碼</span></div>
-            <div style="margin-top: 5px; font-size: 1.1rem; font-weight: 900; color: {'#059669' if cond_4 else '#64748B'};">{status_text}</div>
+        <div style="background-color: {bg_color}; border: 2px solid {border_color}; border-radius: 8px; padding: 15px; text-align: center; height: 100%; display: flex; flex-direction: column; justify-content: space-between;">
+            <div>
+                <div style="font-size: 1.5rem; margin-bottom: 5px;">{'✅' if cond_4 else '⏳'}</div>
+                <div style="font-weight: 900; color: #0F172A; font-size: 1.05rem;">4. 聯準會降息信號發出</div>
+                <div style="margin-top: 8px; font-size: 0.9rem; color: #475569;">量化標準: <span style="font-weight:bold;">2年債 < 基準利率1碼</span></div>
+                <div style="margin-top: 5px; font-size: 1.1rem; font-weight: 900; color: {'#059669' if cond_4 else '#64748B'};">{status_text}</div>
+            </div>
+            <div style="margin-top: 12px; font-size: 0.8rem; color: #334155; text-align: left; background-color: rgba(255,255,255,0.6); padding: 8px; border-radius: 6px;">
+                <b>💡 白話文：</b>當2年期國債利率大幅低於現在的基準利率，代表華爾街拿真金白銀在賭「馬上要降息了」，水龍頭即將打開。
+            </div>
         </div>
         """, unsafe_allow_html=True)
         
     if signals_met >= 3:
         st.success(f"🔥 歷史級長線買點浮現！目前已滿足 {signals_met}/4 項機構抄底條件，可開始將資金大舉轉向風險資產 (股票/長債)。")
     else:
-        st.warning(f"⚠️ 目前僅滿足 {signals_met}/4 項條件。資金應保持防禦姿態 (現金/短債/月配息)，等待流動性拐點。")
+        st.warning(f"⚠️ 目前僅滿足 {signals_met}/4 項條件。尚未出現明確多頭訊號，資金應保持防禦姿態 (現金/短債/月配息)，耐心等待。")
 
 def main():
     st.title("🏦 荷莉總經觀測站 (Holly Dashboard)")
@@ -332,10 +332,12 @@ def main():
         df['VIX_MA20'] = df['VIX'].rolling(window=20).mean()
         df['VIX_Dev_20D'] = ((df['VIX'] - df['VIX_MA20']) / df['VIX_MA20']) * 100
     
-    # === 原有資料預處理 ===
+    # === 原有資料預處理 (確保 CPI 年增率正確計算) ===
     if 'CPI' in df.columns: 
-        df['CPI_YoY'] = df['CPI'].pct_change(periods=252) * 100
-    if 'Core_PCE' in df.columns: df['Core_PCE_YoY'] = df['Core_PCE'].pct_change(periods=252) * 100
+        df['CPI_YoY'] = (df['CPI'] / df['CPI'].shift(252) - 1) * 100 
+    if 'Core_PCE' in df.columns: 
+        df['Core_PCE_YoY'] = (df['Core_PCE'] / df['Core_PCE'].shift(252) - 1) * 100
+        
     if 'SOFR' in df.columns and 'IORB' in df.columns: df['Liquidity_Spread'] = df['SOFR'] - df['IORB']
     if 'DGS10' in df.columns and 'DGS2' in df.columns: df['Yield_Curve'] = df['DGS10'] - df['DGS2']
     if 'Reserve_Balances' in df.columns: df['Reserves_T'] = df['Reserve_Balances'] / 1e6
@@ -352,7 +354,6 @@ def main():
         df['Net_Liquidity'] = df['Total_Assets'] - df['TGA_Account'] - df['ON_RRP']
         df['Liquidity_ROC_4W'] = df['Net_Liquidity'].pct_change(periods=20) * 100
 
-    if 'Core_PCE' in df.columns: df['Core_PCE_YoY'] = df['Core_PCE'].pct_change(periods=252) * 100
     if 'Unemployment_Rate' in df.columns:
         df['U3_MA3'] = df['Unemployment_Rate'].rolling(window=63).mean()
         df['U3_MA3_min12'] = df['U3_MA3'].rolling(window=252).min()
@@ -369,7 +370,6 @@ def main():
     ai_result = st.session_state.ai_data if "ai_data" in st.session_state else {}
     macro_insight = ai_result.get("macro_phase_insight", "💡 尚未取得 AI 總經觀測，請點擊重新解讀。")
 
-    # 🛑 修正點：原本這裡重複貼上呼叫了兩次，現已修正為一次！
     render_taiwan_health_score(df, macro_insight) 
     render_ai_broadcast(ai_result) 
     render_bottom_fishing_signals(df)  
@@ -377,55 +377,55 @@ def main():
     st.divider()
     st.subheader("⚡ 戰術雷達：高頻微觀與籌碼動能 (一週變盤雷達)")
     t1, t2, t3 = st.columns(3)
-    with t1: draw_trend_card(df, "USDTWD_ROC_5D", "台幣 5 日動能 (外資生死線)", "<b>怎麼看：</b>大於 +0.5% (急貶) 代表外資急撤；小於 -0.5% 代表熱錢湧入。", invert_color=True, suffix="%", ma_window=20, absolute_only=True)
-    with t2: draw_trend_card(df, "HY_Spread_Chg_5D", "垃圾債利差 5 日變化", "<b>怎麼看：</b>大於 0 (正數) 代表華爾街正在抽銀根，信用風險飆升。", invert_color=True, suffix="%", ma_window=20, absolute_only=True)
-    with t3: draw_trend_card(df, "VIX_Dev_20D", "VIX 距月線乖離 (情緒偏斜)", "<b>怎麼看：</b>大於 +15% 代表市場極度恐慌；小於 -15% 代表過度貪婪。", invert_color=True, suffix="%", ma_window=20, absolute_only=True)
+    with t1: draw_trend_card(df, "USDTWD_ROC_5D", "台幣 5 日動能 (外資生死線)", "外資匯出匯入的超短期溫度計。<br><span style='color:#0284C7;'><b>💡 白話文：</b>大於 +0.5% (台幣急貶) 代表外資正在瘋狂撤資逃命；小於 -0.5% 代表熱錢湧入台灣準備炒股。</span>", invert_color=True, suffix="%", ma_window=20, absolute_only=True)
+    with t2: draw_trend_card(df, "HY_Spread_Chg_5D", "垃圾債利差 5 日變化", "華爾街銀行借錢意願的短期指標。<br><span style='color:#0284C7;'><b>💡 白話文：</b>數字大於0 (正數) 代表銀行在雨天收傘，體質差的公司借不到錢，股市隨時有連環爆雷風險。</span>", invert_color=True, suffix="%", ma_window=20, absolute_only=True)
+    with t3: draw_trend_card(df, "VIX_Dev_20D", "VIX 距月線乖離 (情緒偏斜)", "短期恐慌與貪婪的極端值。<br><span style='color:#0284C7;'><b>💡 白話文：</b>大於 +15% 代表市場嚇壞了(通常是短線買點)；小於 -15% 代表大家過度樂觀，準備要被割韭菜了。</span>", invert_color=True, suffix="%", ma_window=20, absolute_only=True)
 
     st.divider()
     st.subheader("🛡️ 第一道防線：美股大盤與板塊")
     c1, c2, c3, c4 = st.columns(4)
-    with c1: draw_trend_card(df, "SPY", "標普500 (SPY)", "美國國運基本盤", ma_window=30)
-    with c2: draw_trend_card(df, "QQQ", "那斯達克100 (QQQ)", "AI 熱錢火車頭", ma_window=30)
-    with c3: draw_trend_card(df, "IWM", "羅素2000 (IWM)", "美國中小企業", ma_window=30)
-    with c4: draw_trend_card(df, "XLP", "必需消費板塊 (XLP)", "防禦避風港", ma_window=30)
+    with c1: draw_trend_card(df, "SPY", "標普500 (SPY)", "美國國運基本盤。<br><span style='color:#0284C7;'><b>💡 白話文：</b>買下美國最強500家公司，用來判斷美股整體是多頭還是空頭的絕對基準。</span>", ma_window=30)
+    with c2: draw_trend_card(df, "QQQ", "那斯達克100 (QQQ)", "AI 熱錢火車頭。<br><span style='color:#0284C7;'><b>💡 白話文：</b>科技巨頭集中地，也是台股電子股的直接大哥。大哥跌，台股絕對跟著摔。</span>", ma_window=30)
+    with c3: draw_trend_card(df, "IWM", "羅素2000 (IWM)", "美國中小企業。<br><span style='color:#0284C7;'><b>💡 白話文：</b>對『高利率』最敏感的族群。如果它一直不漲，代表高利率正在壓垮美國底層經濟。</span>", ma_window=30)
+    with c4: draw_trend_card(df, "XLP", "必需消費板塊 (XLP)", "防禦避風港。<br><span style='color:#0284C7;'><b>💡 白話文：</b>賣衛生紙、牙膏的公司。當科技股大崩盤時，資金會躲來這裡保命。</span>", ma_window=30)
 
     st.divider()
     st.subheader("🇹🇼 補充防線：台股風向球")
     c1, c2, c3 = st.columns(3)
-    with c1: draw_trend_card(df, "SOX", "費城半導體 (SOX)", "台股直接命脈", ma_window=30)
-    with c2: draw_trend_card(df, "Copper", "銅博士期貨", "實體訂單指標", prefix="$", ma_window=30)
-    with c3: draw_trend_card(df, "USDTWD", "美元兌台幣", "外資提款機", invert_color=True, ma_window=30)
+    with c1: draw_trend_card(df, "SOX", "費城半導體 (SOX)", "台股直接命脈。<br><span style='color:#0284C7;'><b>💡 白話文：</b>全球半導體霸主集合，直接決定台積電與台股明天的漲跌生死。</span>", ma_window=30)
+    with c2: draw_trend_card(df, "Copper", "銅博士期貨", "實體訂單指標。<br><span style='color:#0284C7;'><b>💡 白話文：</b>工業之母。經濟好才需要蓋廠房買銅，銅價大跌代表實體經濟正在冷卻。</span>", prefix="$", ma_window=30)
+    with c3: draw_trend_card(df, "USDTWD", "美元兌台幣", "外資提款機。<br><span style='color:#0284C7;'><b>💡 白話文：</b>線圖往上(貶值)代表外資把錢匯出台灣；線圖往下(升值)代表外資匯錢進來買台股。</span>", invert_color=True, ma_window=30)
 
     st.divider()
     st.subheader("💣 第二/三道防線：黑天鵝與匯率戰")
     c1, c2, c3, c4 = st.columns(4)
-    with c1: draw_trend_card(df, "VIX", "恐慌指數 (VIX)", "華爾街避險情緒", invert_color=True, ma_window=120)
-    with c2: draw_trend_card(df, "High_Yield_Spread", "垃圾債利差", "企業倒閉雷達", invert_color=True, suffix="%", ma_window=120)
-    with c3: draw_trend_card(df, "DXY", "美元指數 (DXY)", "全球熱錢吸塵器", invert_color=True, ma_window=120)
-    with c4: draw_trend_card(df, "DGS30", "30年期美債殖利率", "長線資金定價之錨", invert_color=True, suffix="%", absolute_only=True)
+    with c1: draw_trend_card(df, "VIX", "恐慌指數 (VIX)", "華爾街避險情緒。<br><span style='color:#0284C7;'><b>💡 白話文：</b>股市的恐懼溫度計。超過20要提高警覺，超過30通常伴隨股災。越低代表大家越貪婪。</span>", invert_color=True, ma_window=120)
+    with c2: draw_trend_card(df, "High_Yield_Spread", "垃圾債利差", "企業倒閉雷達。<br><span style='color:#0284C7;'><b>💡 白話文：</b>體質差的企業借錢的難度。數字飆高代表借不到錢，準備引發倒閉裁員潮。</span>", invert_color=True, suffix="%", ma_window=120)
+    with c3: draw_trend_card(df, "DXY", "美元指數 (DXY)", "全球熱錢吸塵器。<br><span style='color:#0284C7;'><b>💡 白話文：</b>美元的霸權指數。突破105代表美元太強，會把台灣等亞洲國家的股市資金全部吸乾。</span>", invert_color=True, ma_window=120)
+    with c4: draw_trend_card(df, "DGS30", "30年期美債殖利率", "長線資金定價之錨。<br><span style='color:#0284C7;'><b>💡 白話文：</b>全球房貸與大企業借錢的基準。飆破 4.5% 會讓市場極度痛苦，壓垮科技股估值。</span>", invert_color=True, suffix="%", absolute_only=True)
 
     st.divider()
     st.subheader("🛢️ 第四道防線：通膨與泡沫")
     c1, c2, c3, c4 = st.columns(4)
-    with c1: draw_trend_card(df, "Brent", "布倫特原油", "通膨之源", invert_color=True, prefix="$", ma_window=120) 
-    with c2: draw_trend_card(df, "Gold", "黃金期貨", "戰爭通膨避險", prefix="$", ma_window=120)
-    with c3: draw_trend_card(df, "CPI_YoY", "廣義 CPI 年增率", "通膨絕對指標", invert_color=True, suffix="%", absolute_only=True) 
-    with c4: draw_trend_card(df, "Buffett", "巴菲特指標", "歷史級泡沫", invert_color=True, suffix="%", absolute_only=True)
+    with c1: draw_trend_card(df, "Brent", "布倫特原油", "通膨之源。<br><span style='color:#0284C7;'><b>💡 白話文：</b>萬惡之源。油價越高，萬物皆漲，聯準會就絕對不敢降息救市。</span>", invert_color=True, prefix="$", ma_window=120) 
+    with c2: draw_trend_card(df, "Gold", "黃金期貨", "戰爭通膨避險。<br><span style='color:#0284C7;'><b>💡 白話文：</b>亂世保命符。如果股市大跌但黃金大漲，代表大戶在躲避戰爭或系統性大災難。</span>", prefix="$", ma_window=120)
+    with c3: draw_trend_card(df, "CPI_YoY", "廣義 CPI 年增率", "通膨絕對指標。<br><span style='color:#0284C7;'><b>💡 白話文：</b>官方公布的物價漲幅。聯準會的KPI是2%，只要超過3%放水(降息)的機率就很低。</span>", invert_color=True, suffix="%", absolute_only=True) 
+    with c4: draw_trend_card(df, "Buffett", "巴菲特指標", "歷史級泡沫。<br><span style='color:#0284C7;'><b>💡 白話文：</b>美股總市值除以美國GDP。超過 150% 代表股市相較於實體經濟已經貴到離譜，大家都在裸泳。</span>", invert_color=True, suffix="%", absolute_only=True)
 
     st.divider()
     st.subheader("🏦 第五道防線：聯準會底層水箱")
     c1, c2, c3, c4 = st.columns(4)
-    with c1: draw_trend_card(df, "Reserves_T", "銀行準備金", "聯準會活水", suffix=" 兆", ma_window=120)
-    with c2: draw_trend_card(df, "RRP_T", "ON RRP 備用金", "救火緩衝墊", suffix=" 兆", absolute_only=True)
-    with c3: draw_trend_card(df, "Liquidity_Spread", "短期吃緊度", "華爾街現金荒", invert_color=True, suffix="%", absolute_only=True)
-    with c4: draw_trend_card(df, "Yield_Curve", "長短債利差", "衰退領先指標", suffix="%", absolute_only=True)
+    with c1: draw_trend_card(df, "Reserves_T", "銀行準備金", "聯準會活水。<br><span style='color:#0284C7;'><b>💡 白話文：</b>聯準會放在市場的閒錢總量。錢越多股市越會漲，低於3兆代表資金快被抽乾了。</span>", suffix=" 兆", ma_window=120)
+    with c2: draw_trend_card(df, "RRP_T", "ON RRP 備用金", "救火緩衝墊。<br><span style='color:#0284C7;'><b>💡 白話文：</b>市場閒錢的停泊處。這筆錢減少代表被拿去買美債或股票了，是股市的終極救火金。</span>", suffix=" 兆", absolute_only=True)
+    with c3: draw_trend_card(df, "Liquidity_Spread", "短期吃緊度", "華爾街現金荒。<br><span style='color:#0284C7;'><b>💡 白話文：</b>銀行間互相借錢的難度。一旦翻成『正數』代表華爾街發生錢荒，隨時有機構會破產。</span>", invert_color=True, suffix="%", absolute_only=True)
+    with c4: draw_trend_card(df, "Yield_Curve", "長短債利差", "衰退領先指標。<br><span style='color:#0284C7;'><b>💡 白話文：</b>10年期減2年期國債利率。負數(倒掛)是警報，但真正恐怖的是『解除倒掛翻正』的那一刻，通常伴隨股災。</span>", suffix="%", absolute_only=True)
 
     st.divider()
     st.subheader("🏭 終極防線：實體經濟衰退雷達")
     c1, c2, c3 = st.columns(3)
-    with c1: draw_trend_card(df, "Unemployment_Rate", "美國失業率", "消費動能崩盤前兆", invert_color=True, suffix="%", absolute_only=True)
-    with c2: draw_trend_card(df, "Sahm_Indicator", "薩姆衰退指標", "實質衰退觸發器", invert_color=True, suffix="%", absolute_only=True)
-    with c3: draw_trend_card(df, "Core_PCE_YoY", "核心 PCE 年增率", "降息唯一指標", invert_color=True, suffix="%", absolute_only=True)
+    with c1: draw_trend_card(df, "Unemployment_Rate", "美國失業率", "消費動能崩盤前兆。<br><span style='color:#0284C7;'><b>💡 白話文：</b>經濟的終極成績單。失業率一旦開始無腦往上飆，代表就算降息也救不回買氣了。</span>", invert_color=True, suffix="%", absolute_only=True)
+    with c2: draw_trend_card(df, "Sahm_Indicator", "薩姆衰退指標", "實質衰退觸發器。<br><span style='color:#0284C7;'><b>💡 白話文：</b>史上最神準的警報器。只要這個數值突破 0.5%，美國經濟 100% 已經陷入實質衰退。</span>", invert_color=True, suffix="%", absolute_only=True)
+    with c3: draw_trend_card(df, "Core_PCE_YoY", "核心 PCE 年增率", "降息唯一指標。<br><span style='color:#0284C7;'><b>💡 白話文：</b>聯準會最愛看的通膨數據(扣除浮動大的能源食物)。代表最真實、最難降下來的物價。</span>", invert_color=True, suffix="%", absolute_only=True)
 
 if __name__ == "__main__":
     main()
