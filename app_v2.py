@@ -218,38 +218,6 @@ def render_ai_broadcast(ai_result):
     reasons = ai_result.get("allocation_reasons", {})
     market_insights = ai_result.get("market_insights_html", "")
 
-    # 🛑 已經移除那三個寫死的機率方塊，直接顯示 AI 總經解析
-    with st.expander("🎙️ 展開今日荷莉大師級 AI 總經解析", expanded=True):
-        st.markdown(broadcast_text, unsafe_allow_html=True)
-        if st.button("🔄 重新解讀", key="btn_rerun"):
-            if "ai_data" in st.session_state: del st.session_state.ai_data
-            st.rerun()
-
-    if market_insights:
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.subheader("🛡️ 今日目標資金配置與實戰劇本")
-        c1, c2 = st.columns([1, 1.8])
-        with c1:
-            if allocation:
-                labels = ['台幣存款', '外幣與公司債', '月配息現金流', '核心股票', '黃金與戰術']
-                vals = [allocation.get("twd_cash", 20), allocation.get("usd_assets", 20), allocation.get("cashflow", 20), allocation.get("core_growth", 20), allocation.get("tactical_hedge", 20)]
-                colors = ['#94A3B8', '#0284C7', '#10B981', '#F59E0B', '#EF4444']
-                fig_pie = go.Figure(data=[go.Pie(labels=labels, values=vals, hole=.45, marker=dict(colors=colors, line=dict(color='#FFFFFF', width=2)), textinfo='percent', textfont=dict(size=16, color='#FFFFFF'))])
-                fig_pie.update_layout(margin=dict(t=0, b=15, l=0, r=0), showlegend=False, height=280, paper_bgcolor='rgba(0,0,0,0)')
-                st.plotly_chart(fig_pie, use_container_width=True, config={'displayModeBar': False}, key="pie_chart")
-                
-                st.markdown(f"""
-                <div style="font-size: 0.95rem; line-height: 1.5;">
-                    <div style="border-left: 4px solid #94A3B8; padding-left: 8px; margin-bottom: 12px;"><b>台幣存款 ({vals[0]}%)</b><br><span style="color:#475569; font-size: 0.85rem;">{reasons.get("twd_cash", "防禦保命")}</span></div>
-                    <div style="border-left: 4px solid #0284C7; padding-left: 8px; margin-bottom: 12px;"><b>外幣與公司債 ({vals[1]}%)</b><br><span style="color:#475569; font-size: 0.85rem;">{reasons.get("usd_assets", "鎖利防禦")}</span></div>
-                    <div style="border-left: 4px solid #10B981; padding-left: 8px; margin-bottom: 12px;"><b>月配息現金流 ({vals[2]}%)</b><br><span style="color:#475569; font-size: 0.85rem;">{reasons.get("cashflow", "震盪護城河")}</span></div>
-                    <div style="border-left: 4px solid #F59E0B; padding-left: 8px; margin-bottom: 12px;"><b>核心股票 ({vals[3]}%)</b><br><span style="color:#475569; font-size: 0.85rem;">{reasons.get("core_growth", "資本攻擊")}</span></div>
-                    <div style="border-left: 4px solid #EF4444; padding-left: 8px; margin-bottom: 12px;"><b>黃金與戰術 ({vals[4]}%)</b><br><span style="color:#475569; font-size: 0.85rem;">{reasons.get("tactical_hedge", "黑天鵝防禦")}</span></div>
-                </div>
-                """, unsafe_allow_html=True)
-        with c2:
-            st.markdown(market_insights, unsafe_allow_html=True)
-
     with st.expander("🎙️ 展開今日荷莉大師級 AI 總經解析", expanded=True):
         st.markdown(broadcast_text, unsafe_allow_html=True)
         if st.button("🔄 重新解讀", key="btn_rerun"):
@@ -286,17 +254,14 @@ def render_bottom_fishing_signals(df):
     st.subheader("🚦 機構級抄底/逃頂：四大長線買入確認信號")
     st.markdown("當以下 **4 個條件滿足 3 個以上**時，代表系統性風險解除，是重新大舉買入長期風險資產的歷史級時刻。")
     
-    # 抓取最新數值
     brent_val = df['Brent'].dropna().iloc[-1] if 'Brent' in df.columns else 100.0
     cpi_yoy = df['CPI_YoY'].dropna().iloc[-1] if 'CPI_YoY' in df.columns else 5.0
     dgs10_val = df['DGS10'].dropna().iloc[-1] if 'DGS10' in df.columns else 5.0
     
-    # 降息信號量化邏輯：當 2年期美債殖利率低於聯邦基準利率 (IORB) 超過 1 碼 (0.25%)，代表市場已強烈定價降息
     dgs2_val = df['DGS2'].dropna().iloc[-1] if 'DGS2' in df.columns else 5.0
     iorb_val = df['IORB'].dropna().iloc[-1] if 'IORB' in df.columns else 5.0
     rate_cut_priced_in = dgs2_val < (iorb_val - 0.25)
     
-    # 判斷條件
     cond_1 = brent_val < 90.0
     cond_2 = cpi_yoy < 2.5
     cond_3 = dgs10_val < 4.3
@@ -367,10 +332,9 @@ def main():
         df['VIX_MA20'] = df['VIX'].rolling(window=20).mean()
         df['VIX_Dev_20D'] = ((df['VIX'] - df['VIX_MA20']) / df['VIX_MA20']) * 100
     
-
     # === 原有資料預處理 ===
     if 'CPI' in df.columns: 
-        df['CPI_YoY'] = df['CPI'].pct_change(periods=252) * 100 # FRED 日級別 ffill，252天剛好等於 YoY
+        df['CPI_YoY'] = df['CPI'].pct_change(periods=252) * 100
     if 'Core_PCE' in df.columns: df['Core_PCE_YoY'] = df['Core_PCE'].pct_change(periods=252) * 100
     if 'SOFR' in df.columns and 'IORB' in df.columns: df['Liquidity_Spread'] = df['SOFR'] - df['IORB']
     if 'DGS10' in df.columns and 'DGS2' in df.columns: df['Yield_Curve'] = df['DGS10'] - df['DGS2']
@@ -405,9 +369,10 @@ def main():
     ai_result = st.session_state.ai_data if "ai_data" in st.session_state else {}
     macro_insight = ai_result.get("macro_phase_insight", "💡 尚未取得 AI 總經觀測，請點擊重新解讀。")
 
+    # 🛑 修正點：原本這裡重複貼上呼叫了兩次，現已修正為一次！
     render_taiwan_health_score(df, macro_insight) 
     render_ai_broadcast(ai_result) 
-    render_bottom_fishing_signals(df)  # 🟢 呼叫剛做好的四大抄底信號模組
+    render_bottom_fishing_signals(df)  
 
     st.divider()
     st.subheader("⚡ 戰術雷達：高頻微觀與籌碼動能 (一週變盤雷達)")
@@ -437,15 +402,14 @@ def main():
     with c1: draw_trend_card(df, "VIX", "恐慌指數 (VIX)", "華爾街避險情緒", invert_color=True, ma_window=120)
     with c2: draw_trend_card(df, "High_Yield_Spread", "垃圾債利差", "企業倒閉雷達", invert_color=True, suffix="%", ma_window=120)
     with c3: draw_trend_card(df, "DXY", "美元指數 (DXY)", "全球熱錢吸塵器", invert_color=True, ma_window=120)
-    # 🟢 把 30 年期美債放在這裡取代日圓，或者加在防線裡
     with c4: draw_trend_card(df, "DGS30", "30年期美債殖利率", "長線資金定價之錨", invert_color=True, suffix="%", absolute_only=True)
 
     st.divider()
     st.subheader("🛢️ 第四道防線：通膨與泡沫")
-    c1, c2, c3, c4 = st.columns(4) # 改成 4 欄
-    with c1: draw_trend_card(df, "Brent", "布倫特原油", "通膨之源", invert_color=True, prefix="$", ma_window=120) # 換成布倫特
+    c1, c2, c3, c4 = st.columns(4)
+    with c1: draw_trend_card(df, "Brent", "布倫特原油", "通膨之源", invert_color=True, prefix="$", ma_window=120) 
     with c2: draw_trend_card(df, "Gold", "黃金期貨", "戰爭通膨避險", prefix="$", ma_window=120)
-    with c3: draw_trend_card(df, "CPI_YoY", "廣義 CPI 年增率", "通膨絕對指標", invert_color=True, suffix="%", absolute_only=True) # 🟢 新增 CPI 卡片
+    with c3: draw_trend_card(df, "CPI_YoY", "廣義 CPI 年增率", "通膨絕對指標", invert_color=True, suffix="%", absolute_only=True) 
     with c4: draw_trend_card(df, "Buffett", "巴菲特指標", "歷史級泡沫", invert_color=True, suffix="%", absolute_only=True)
 
     st.divider()
