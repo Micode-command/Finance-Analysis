@@ -46,6 +46,7 @@ def load_data():
     return fetch_fed_data()
 
 def draw_trend_card(df: pd.DataFrame, column: str, title: str, desc: str, invert_color: bool = False, val_format: str = "{:.2f}", prefix: str = "", suffix: str = "", ma_window: int = 30, pr_type: str = 'C'):
+    # 1. 無數據防呆機制
     if column not in df.columns:
         st.markdown(f"<div class='metric-card'><div class='metric-title'>{title}</div><div class='metric-desc'>{desc}</div><div style='font-weight:bold; color:#EF4444;'>無數據 (請點左側清除快取)</div></div>", unsafe_allow_html=True)
         return
@@ -55,6 +56,7 @@ def draw_trend_card(df: pd.DataFrame, column: str, title: str, desc: str, invert
         st.markdown(f"<div class='metric-card'><div class='metric-title'>{title}</div><div class='metric-desc'>{desc}</div><div style='font-weight:bold; color:#F59E0B;'>數據不足</div></div>", unsafe_allow_html=True)
         return
 
+    # 2. 計算基礎數據與趨勢
     s_period = valid_data.tail(ma_window)
     current_val = s_period.iloc[-1]
     last_date = s_period.index[-1].strftime("%Y-%m-%d")
@@ -62,15 +64,16 @@ def draw_trend_card(df: pd.DataFrame, column: str, title: str, desc: str, invert
     deviation = current_val - avg_val
     deviation_pct = (deviation / abs(avg_val)) * 100 if avg_val != 0 else 0
 
-    # 🟢 動態熱力圖 PR 徽章生成函數
+    # 3. 🟢 五階動態熱力圖 PR 徽章生成引擎
     def get_pr_badge(pr_v, label):
-        if pr_v >= 90: style = "background-color: #991B1B; color: #FFFFFF;" # 深紅
-        elif pr_v >= 80: style = "background-color: #EA580C; color: #FFFFFF;" # 橘紅
-        elif pr_v >= 20: style = "background-color: #F1F5F9; color: #475569; border: 1px solid #CBD5E1;" # 灰白
-        elif pr_v >= 10: style = "background-color: #D1FAE5; color: #065F46; border: 1px solid #34D399;" # 淺綠
-        else: style = "background-color: #064E3B; color: #FFFFFF;" # 深綠
+        if pr_v >= 90: style = "background-color: #991B1B; color: #FFFFFF;" # 深紅 (極端危險)
+        elif pr_v >= 80: style = "background-color: #EA580C; color: #FFFFFF;" # 橘紅 (警戒)
+        elif pr_v >= 20: style = "background-color: #F1F5F9; color: #475569; border: 1px solid #CBD5E1;" # 灰白 (常態)
+        elif pr_v >= 10: style = "background-color: #D1FAE5; color: #065F46; border: 1px solid #34D399;" # 淺綠 (超跌)
+        else: style = "background-color: #064E3B; color: #FFFFFF;" # 深綠 (黃金坑)
         return f"<div style='{style} display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; margin-left: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.1);'>{label} {pr_v:.0f}</div>"
 
+    # 4. 計算 C-PR (週期) 或 G-PR (雙乖離)
     pr_html = ""
     if len(valid_data) >= 252:
         if pr_type == 'C':
@@ -87,6 +90,7 @@ def draw_trend_card(df: pd.DataFrame, column: str, title: str, desc: str, invert
             dev200 = ((valid_data - ma200) / ma200).dropna()
             if not dev200.empty: pr_html += get_pr_badge(dev200.rank(pct=True).iloc[-1] * 100, "G-200PR")
 
+    # 5. 判斷顏色與趨勢變動文字
     is_up = deviation >= 0
     if invert_color:
         line_color = COLORS['red'] if is_up else COLORS['emerald']
@@ -98,29 +102,34 @@ def draw_trend_card(df: pd.DataFrame, column: str, title: str, desc: str, invert
     dev_sign = "+" if is_up else ""
     val_str = f"{prefix}{val_format.format(current_val)}{suffix}"
 
+    # 6. 繪製 Plotly 迷你趨勢圖
     fig = go.Figure()
     if pr_type == 'C':
+        # 週期型指標加上均值虛線
         fig.add_trace(go.Scatter(x=[s_period.index[0], s_period.index[-1]], y=[avg_val, avg_val], mode='lines', line=dict(color=COLORS['tech_silver'], width=2, dash='dash'), hoverinfo='skip'))
     fig.add_trace(go.Scatter(x=s_period.index, y=s_period.values, mode='lines', line=dict(color=line_color, width=3), hovertemplate='%{x|%m-%d}: %{y:.2f}<extra></extra>'))
     fig.update_layout(height=70, margin=dict(l=0, r=0, t=5, b=0), showlegend=False, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', xaxis=dict(visible=False, showgrid=False), yaxis=dict(visible=False, showgrid=False))
 
     dev_label = f"<span style='color: {COLORS['ink']}; font-size: 0.85rem; font-weight: 600;'>近期趨勢</span>" if pr_type == 'C' else f"<span class='{dev_class}'>{dev_sign}{deviation_pct:.1f}% (距月線)</span>"
 
+    # 7. 🟢 最終 HTML 渲染 (置中大字體版) - 確保只有一次輸出！
     st.markdown(f"""
         <div class="metric-card">
             <div style="position: absolute; top: 12px; right: 12px; display: flex; gap: 2px;">{pr_html}</div>
             <div>
                 <div class="metric-title">{title}</div>
-                <div class="metric-desc" style="margin-top: 8px;">{desc}</div>
-                <div class="metric-date" style="margin-top: 10px;">資料日期: {last_date}</div>
+                <div class="metric-desc">{desc}</div>
             </div>
-            <div style="display: flex; justify-content: space-between; align-items: baseline; margin-top: 5px;">
-                <span class="metric-value">{val_str}</span>
-                {dev_label}
+            <div>
+                <div class="metric-value">{val_str}</div>
+                <div class="dev-label">{dev_label}</div>
             </div>
+            <div class="metric-date">資料日期: {last_date}</div>
         </div>
     """, unsafe_allow_html=True)
     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False}, key=f"chart_{column}_{pr_type}")
+
+    
 def render_taiwan_health_score(df: pd.DataFrame, macro_insight: str = ""):
     score = 50
     details = []
