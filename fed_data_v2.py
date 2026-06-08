@@ -35,9 +35,9 @@ YF_TICKERS = {
     "SPY": "SPY", "QQQ": "QQQ", "IWM": "IWM", "XLP": "XLP",
     "SOX": "^SOX", "VIX": "^VIX", "DXY": "DX-Y.NYB",
     "USDJPY": "JPY=X", "USDTWD": "TWD=X",
-    "WTI": "CL=F", "Brent": "BZ=F", "Gold": "GC=F", "Copper": "HG=F" # 🟢 新增：布倫特原油 (BZ=F)
+    "WTI": "CL=F", "Brent": "BZ=F", "Gold": "GC=F", "Copper": "HG=F",
+    "SMH": "SMH"  # 🟢 加入這行：VanEck 半導體 ETF
 }
-
 FRED_OBS_URL = "https://api.stlouisfed.org/fred/series/observations"
 
 # ==========================================
