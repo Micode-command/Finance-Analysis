@@ -247,6 +247,7 @@ def render_bottom_fishing_signals(df):
     brent_val = df['Brent'].dropna().iloc[-1] if 'Brent' in df.columns else 100.0
     cpi_yoy = df['CPI_YoY'].dropna().iloc[-1] if 'CPI_YoY' in df.columns else 5.0
     dgs10_val = df['DGS10'].dropna().iloc[-1] if 'DGS10' in df.columns else 5.0
+    dgs30_val = df['DGS30'].dropna().iloc[-1] if 'DGS30' in df.columns else 5.0  
     
     dgs2_val = df['DGS2'].dropna().iloc[-1] if 'DGS2' in df.columns else 5.0
     iorb_val = df['IORB'].dropna().iloc[-1] if 'IORB' in df.columns else 5.0
@@ -254,7 +255,7 @@ def render_bottom_fishing_signals(df):
     
     cond_1 = brent_val < 90.0
     cond_2 = cpi_yoy < 2.5
-    cond_3 = dgs10_val < 4.3
+    cond_3 = (dgs10_val < 4.3) and (dgs30_val < 4.5) 
     cond_4 = rate_cut_priced_in
     
     signals_met = sum([cond_1, cond_2, cond_3, cond_4])
@@ -281,21 +282,63 @@ def render_bottom_fishing_signals(df):
     c1, c2, c3, c4 = st.columns(4)
     with c1: st.markdown(get_card_html("1. 原油解除通膨警報", brent_val, "< $90", cond_1, "油價是萬物齊漲的源頭。跌破90元代表通膨惡夢結束，聯準會才有底氣印鈔票救市。", "$"), unsafe_allow_html=True)
     with c2: st.markdown(get_card_html("2. 廣義 CPI 實質降溫", cpi_yoy, "< 2.5%", cond_2, "官方物價漲幅達標。代表聯準會不再需要用『高利率』來壓榨實體經濟，資金準備解放。", "%"), unsafe_allow_html=True)
-    with c3: st.markdown(get_card_html("3. 10年期美債殖利率回落", dgs10_val, "< 4.3%", cond_3, "全球資金的借款成本變便宜了！這會讓大公司的還款壓力大減，科技股估值準備往上衝。", "%"), unsafe_allow_html=True)
-    with c4: 
-        status_text = "已定價降息" if cond_4 else "緊縮震盪中"
-        bg_color = "#ECFDF5" if cond_4 else "#F8FAFC"
-        border_color = "#10B981" if cond_4 else "#CBD5E1"
+    
+    # 🟢 升級版：美債 3 號卡片 (雙數值並列 + 閾值意義解析)
+    with c3: 
+        bg_color_3 = "#ECFDF5" if cond_3 else "#F8FAFC"
+        border_color_3 = "#10B981" if cond_3 else "#CBD5E1"
         st.markdown(f"""
-        <div style="background-color: {bg_color}; border: 2px solid {border_color}; border-radius: 8px; padding: 15px; text-align: center; height: 100%; display: flex; flex-direction: column; justify-content: space-between;">
+        <div style="background-color: {bg_color_3}; border: 2px solid {border_color_3}; border-radius: 8px; padding: 15px; text-align: center; height: 100%; display: flex; flex-direction: column; justify-content: space-between;">
             <div>
-                <div style="font-size: 1.5rem; margin-bottom: 5px;">{'✅' if cond_4 else '⏳'}</div>
-                <div style="font-weight: 900; color: #0F172A; font-size: 1.05rem;">4. 聯準會降息信號發出</div>
-                <div style="margin-top: 8px; font-size: 0.9rem; color: #475569;">量化標準: <span style="font-weight:bold;">2年債 < 基準利率1碼</span></div>
-                <div style="margin-top: 5px; font-size: 1.1rem; font-weight: 900; color: {'#059669' if cond_4 else '#64748B'};">{status_text}</div>
+                <div style="font-size: 1.5rem; margin-bottom: 5px;">{'✅' if cond_3 else '⏳'}</div>
+                <div style="font-weight: 900; color: #0F172A; font-size: 1.05rem;">3. 長天期美債解除警報</div>
+                <div style="margin-top: 8px; font-size: 0.85rem; color: #475569;">目標: <span style="font-weight:bold;">10年<4.3% 且 30年<4.5%</span></div>
+                
+                <div style="display: flex; justify-content: space-between; margin-top: 10px; gap: 5px;">
+                    <div style="flex: 1; background: #ffffff; border: 1px solid #E2E8F0; border-radius: 6px; padding: 8px;">
+                        <div style="font-size: 0.75rem; color: #64748B; font-weight: bold;">10年期 (企業估值)</div>
+                        <div style="font-size: 1.1rem; font-weight: 900; color: {'#059669' if dgs10_val < 4.3 else '#DC2626'};">{dgs10_val:.2f}%</div>
+                        <div style="font-size: 0.7rem; color: #DC2626; margin-top: 4px;">>4.5% 科技股殺估值</div>
+                        <div style="font-size: 0.7rem; color: #059669;"><4.3% 資金進場擴張</div>
+                    </div>
+                    <div style="flex: 1; background: #ffffff; border: 1px solid #E2E8F0; border-radius: 6px; padding: 8px;">
+                        <div style="font-size: 0.75rem; color: #64748B; font-weight: bold;">30年期 (房貸/通膨)</div>
+                        <div style="font-size: 1.1rem; font-weight: 900; color: {'#059669' if dgs30_val < 4.5 else '#DC2626'};">{dgs30_val:.2f}%</div>
+                        <div style="font-size: 0.7rem; color: #DC2626; margin-top: 4px;">>5.0% 長線資金撤退</div>
+                        <div style="font-size: 0.7rem; color: #059669;"><4.5% 實體經濟復甦</div>
+                    </div>
+                </div>
             </div>
             <div style="margin-top: 12px; font-size: 0.8rem; color: #334155; text-align: left; background-color: rgba(255,255,255,0.6); padding: 8px; border-radius: 6px;">
-                <b>💡 白話文：</b>當2年期國債利率大幅低於現在的基準利率，代表華爾街拿真金白銀在賭「馬上要降息了」，水龍頭即將打開。
+                <b>💡 白話文：</b>兩大長期利率同時回落，代表「高息壓榨」結束，股市與房市的長線大戶才會真正放心拿錢出來買進。
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with c4: 
+        status_text = "已定價降息" if cond_4 else "緊縮震盪中"
+        bg_color_4 = "#ECFDF5" if cond_4 else "#F8FAFC"
+        border_color_4 = "#10B981" if cond_4 else "#CBD5E1"
+        st.markdown(f"""
+        <div style="background-color: {bg_color_4}; border: 2px solid {border_color_4}; border-radius: 8px; padding: 15px; text-align: center; height: 100%; display: flex; flex-direction: column; justify-content: space-between;">
+            <div>
+                <div style="font-size: 1.5rem; margin-bottom: 5px;">{'✅' if cond_4 else '⏳'}</div>
+                <div style="font-weight: 900; color: #0F172A; font-size: 1.05rem;">4. 聯準會降息定價</div>
+                <div style="margin-top: 8px; font-size: 0.85rem; color: #475569;">標準: <span style="font-weight:bold;">2年債 < 基準利率1碼</span></div>
+                
+                <div style="display: flex; justify-content: space-between; margin-top: 10px; gap: 5px;">
+                    <div style="flex: 1; background: #ffffff; border: 1px solid #E2E8F0; border-radius: 6px; padding: 8px;">
+                        <div style="font-size: 0.75rem; color: #64748B; font-weight: bold;">2年期國債 (市場)</div>
+                        <div style="font-size: 1.1rem; font-weight: 900; color: {'#059669' if cond_4 else '#0F172A'};">{dgs2_val:.2f}%</div>
+                    </div>
+                    <div style="flex: 1; background: #ffffff; border: 1px solid #E2E8F0; border-radius: 6px; padding: 8px;">
+                        <div style="font-size: 0.75rem; color: #64748B; font-weight: bold;">基準利率 (官方)</div>
+                        <div style="font-size: 1.1rem; font-weight: 900; color: #0F172A;">{iorb_val:.2f}%</div>
+                    </div>
+                </div>
+            </div>
+            <div style="margin-top: 12px; font-size: 0.8rem; color: #334155; text-align: left; background-color: rgba(255,255,255,0.6); padding: 8px; border-radius: 6px;">
+                <b>💡 白話文：</b>2年期國債代表「聰明錢的預期」。當它大幅低於現在官方規定的利息，代表市場拿真金白銀在賭「水龍頭即將打開了」。
             </div>
         </div>
         """, unsafe_allow_html=True)
