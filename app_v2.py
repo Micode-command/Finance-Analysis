@@ -366,12 +366,21 @@ def main():
 
     import os
     api_key = os.environ.get("GEMINI_API_KEY") or (st.secrets.get("GEMINI_API_KEY") if "GEMINI_API_KEY" in st.secrets else None)
-    if "ai_data" not in st.session_state and api_key:
-        with st.spinner("🤖 正在結合五大防線與最新新聞進行深度解讀..."):
-            st.session_state.ai_data = generate_ai_summary(df, api_key)
-            
-    ai_result = st.session_state.ai_data if "ai_data" in st.session_state else {}
-    macro_insight = ai_result.get("macro_phase_insight", "💡 尚未取得 AI 總經觀測，請點擊重新解讀。")
+    
+    # 初始化 session_state
+    if "ai_data" not in st.session_state:
+        st.session_state.ai_data = {}
+
+    # 🛑 加入手動安全鎖：只有按鈕被按下時才呼叫 AI
+    if not st.session_state.ai_data and api_key:
+        st.info("💡 數據已載入完畢。點擊下方按鈕召喚荷莉大師進行今日總經解盤！(此舉將保護你的免費 API 額度)")
+        if st.button("🤖 生成今日 AI 深度解盤", use_container_width=True):
+            with st.spinner("🤖 正在結合五大防線與最新新聞進行深度解讀，請稍候..."):
+                st.session_state.ai_data = generate_ai_summary(df, api_key)
+                st.rerun() # 跑完自動重整畫面
+
+    ai_result = st.session_state.ai_data
+    macro_insight = ai_result.get("macro_phase_insight", "💡 尚未取得 AI 總經觀測，請點擊上方按鈕解讀。")
 
     render_taiwan_health_score(df, macro_insight) 
     render_ai_broadcast(ai_result) 
