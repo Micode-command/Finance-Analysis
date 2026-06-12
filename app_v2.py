@@ -346,10 +346,12 @@ def main():
             # 短期(季線)相對強度乖離
             df['SMH_Relative_Strength'] = ((df['SMH_SPY_Ratio'] - df['SMH_SPY_Ratio_MA60']) / df['SMH_SPY_Ratio_MA60']) * 100
 
+    # === 🟢 修正：後端已透過 pc1 參數算好精準 YoY，前端直接映射讀取即可 ===
     if 'CPI' in df.columns: 
-        df['CPI_YoY'] = (df['CPI'] / df['CPI'].shift(252) - 1) * 100 
+        df['CPI_YoY'] = df['CPI']
     if 'Core_PCE' in df.columns: 
-        df['Core_PCE_YoY'] = (df['Core_PCE'] / df['Core_PCE'].shift(252) - 1) * 100
+        df['Core_PCE_YoY'] = df['Core_PCE']
+
         
     if 'SOFR' in df.columns and 'IORB' in df.columns: df['Liquidity_Spread'] = df['SOFR'] - df['IORB']
     if 'DGS10' in df.columns and 'DGS2' in df.columns: df['Yield_Curve'] = df['DGS10'] - df['DGS2']
