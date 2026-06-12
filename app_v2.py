@@ -44,6 +44,21 @@ with st.sidebar:
 @st.cache_data(ttl=3600)
 def load_data(): 
     return fetch_fed_data()
+@st.cache_data(ttl=3600*12) # 半天更新一次估值即可
+def fetch_valuation_data():
+    tickers = {"標普500 (SPY)": "SPY", "科技股 (QQQ)": "QQQ", "半導體 (SMH)": "SMH"}
+    val_data = {}
+    import yfinance as yf
+    for name, t in tickers.items():
+        try:
+            info = yf.Ticker(t).info
+            # ETF 的 PE 欄位有時在 trailingPE，有時在 peRatio
+            pe = info.get('trailingPE') or info.get('peRatio') or 0
+            fwd_pe = info.get('forwardPE', 0)
+            val_data[name] = {"PE": pe, "Fwd_PE": fwd_pe}
+        except:
+            val_data[name] = {"PE": 0, "Fwd_PE": 0}
+    return val_data
 
 def draw_trend_card(df: pd.DataFrame, column: str, title: str, desc: str, invert_color: bool = False, val_format: str = "{:.2f}", prefix: str = "", suffix: str = "", ma_window: int = 30, pr_type: str = 'C'):
     # 1. 無數據防呆機制
@@ -110,9 +125,12 @@ def draw_trend_card(df: pd.DataFrame, column: str, title: str, desc: str, invert
     fig.add_trace(go.Scatter(x=s_period.index, y=s_period.values, mode='lines', line=dict(color=line_color, width=3), hovertemplate='%{x|%m-%d}: %{y:.2f}<extra></extra>'))
     fig.update_layout(height=70, margin=dict(l=0, r=0, t=5, b=0), showlegend=False, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', xaxis=dict(visible=False, showgrid=False), yaxis=dict(visible=False, showgrid=False))
 
-    dev_label = f"<span style='color: {COLORS['ink']}; font-size: 0.85rem; font-weight: 600;'>近期趨勢</span>" if pr_type == 'C' else f"<span class='{dev_class}'>{dev_sign}{deviation_pct:.1f}% (距月線)</span>"
-
+    if is_macro:
+        dev_label = f"<span style='color: {COLORS['ink']}; font-size: 0.85rem; font-weight: 600;'>宏觀趨勢</span>"
+    else:
+        dev_label = f"<span style='color: {COLORS['ink']}; font-size: 0.85rem; font-weight: 600;'>近期趨勢</span>" if pr_type == 'C' else f"<span class='{dev_class}'>{dev_sign}{deviation_pct:.1f}% (距月線)</span>"
     # 7. 🟢 最終 HTML 渲染 (置中大字體版) - 確保只有一次輸出！
+
     st.markdown(f"""
         <div class="metric-card">
             <div style="position: absolute; top: 12px; right: 12px; display: flex; gap: 2px;">{pr_html}</div>
@@ -223,7 +241,43 @@ def render_ai_broadcast(ai_result):
         if st.button("🔄 重新解讀", key="btn_rerun"):
             if "ai_data" in st.session_state: del st.session_state.ai_data
             st.rerun()
-
+   
+    
+    for i, (col, (name, metrics)) in enumerate(zip([v1, v2, v3], val_data.items())):
+        with col:
+            pe = metrics['PE']
+            fwd_pe = metrics['Fwd_PE']
+            
+            # 防呆機制與狀態判定
+            if pe == 0:
+                pe_status = "數據暫缺"
+                status_color = "#64748B"
+            else:
+                if pe > 30: pe_status, status_color = "估值偏高 (警戒)", COLORS['red']
+                elif pe < 20: pe_status, status_color = "估值便宜 (買點)", COLORS['emerald']
+                else: pe_status, status_color = "估值合理", COLORS['amber']
+            
+            fwd_status = "預估獲利將成長 🚀" if fwd_pe > 0 and fwd_pe < pe else "預估獲利放緩 ⚠️" if fwd_pe > pe else "預估持平"
+            
+            st.markdown(f"""
+            <div style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 15px;">
+                <div style="font-size: 1.05rem; font-weight: 800; color: #0F172A; margin-bottom: 10px;">{name}</div>
+                <div style="display: flex; justify-content: space-between; align-items: flex-end;">
+                    <div>
+                        <div style="font-size: 0.8rem; color: #64748B; font-weight: bold;">當前本益比 (Trailing P/E)</div>
+                        <div style="font-size: 1.8rem; font-weight: 900; color: {COLORS['ink']}; line-height: 1.2;">{pe:.1f}</div>
+                    </div>
+                    <div style="text-align: right;">
+                        <div style="font-size: 0.8rem; color: #64748B; font-weight: bold;">預估本益比 (Forward)</div>
+                        <div style="font-size: 1.2rem; font-weight: 700; color: #3B82F6;">{fwd_pe:.1f}</div>
+                    </div>
+                </div>
+                <div style="margin-top: 10px; padding-top: 10px; border-top: 1px dashed #CBD5E1; display: flex; justify-content: space-between; font-size: 0.85rem;">
+                    <span style="color: {status_color}; font-weight: bold;">{pe_status}</span>
+                    <span style="color: #475569;">{fwd_status}</span>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
     if market_insights:
         st.markdown("<br>", unsafe_allow_html=True)
         st.subheader("🛡️ 今日目標資金配置與實戰劇本")
@@ -352,7 +406,7 @@ def main():
     if 'Core_PCE' in df.columns: 
         df['Core_PCE_YoY'] = df['Core_PCE']
 
-        
+
     if 'SOFR' in df.columns and 'IORB' in df.columns: df['Liquidity_Spread'] = df['SOFR'] - df['IORB']
     if 'DGS10' in df.columns and 'DGS2' in df.columns: df['Yield_Curve'] = df['DGS10'] - df['DGS2']
     if 'Reserve_Balances' in df.columns: df['Reserves_T'] = df['Reserve_Balances'] / 1e6
@@ -405,7 +459,11 @@ def main():
     with t2: draw_trend_card(df, "HY_Spread_Chg_5D", "垃圾債利差 5 日變化", "華爾街銀行借錢意願的短期指標。<br><span style='color:#0284C7;'><b>💡：</b>數字大於0 (正數) 代表銀行在雨天收傘，體質差的公司借不到錢，股市隨時有連環爆雷風險。</span>", invert_color=True, suffix="%", ma_window=20, pr_type='C')
     with t3: draw_trend_card(df, "VIX_Dev_20D", "VIX 距月線乖離 (情緒偏斜)", "短期恐慌與貪婪的極端值。<br><span style='color:#0284C7;'><b>💡：</b>大於 +15% 代表市場嚇壞了(通常是短線買點)；小於 -15% 代表大家過度樂觀，準備要被割韭菜了。</span>", invert_color=True, suffix="%", ma_window=20, pr_type='C')
     
+     # === 🟢 新增：價值投資估值防線 ===
     st.divider()
+    st.subheader("⚖️ 價值投資估值防線 (動態本益比)")
+    val_data = fetch_valuation_data()
+    v1, v2, v3 = st.columns(3)
     st.subheader("🔥 賽道擁擠度與泡沫雷達 (半導體過熱警報)")
     c1, c2 = st.columns(2)
     with c1: 
@@ -463,9 +521,16 @@ def main():
     st.divider()
     st.subheader("🏭 終極防線：實體經濟衰退雷達")
     c1, c2, c3 = st.columns(3)
-    with c1: draw_trend_card(df, "Unemployment_Rate", "美國失業率", "<div style='font-size:0.8rem; line-height:1.5;'><b>🧮 公式：</b>勞動市場健康度。<br><b>📊 閾值：</b>形成明顯上升趨勢即不妙。<br><b>⚔️ 連動：</b>一旦狂飆，代表民眾無力消費，此時就算降息也救不回獲利衰退的殺盤。</div>", invert_color=True, suffix="%", pr_type='C')
-    with c2: draw_trend_card(df, "Sahm_Indicator", "薩姆衰退指標", "<div style='font-size:0.8rem; line-height:1.5;'><b>🧮 公式：</b>失業率3個月均值與前低比較。<br><b>📊 閾值：</b>> 0.5% 即宣告 100% 衰退。<br><b>⚔️ 連動：</b>史上最神準警報。一旦觸發，代表經濟陷入硬著陸，風險資產將遭遇拋售。</div>", invert_color=True, suffix="%", pr_type='C')
-    with c3: draw_trend_card(df, "Core_PCE_YoY", "核心 PCE 年增率", "<div style='font-size:0.8rem; line-height:1.5;'><b>🧮 公式：</b>扣除能源食物的真實通膨。<br><b>📊 閾值：</b>黏性極強，降至 2% 才安全。<br><b>⚔️ 連動：</b>聯準會決策的唯一核心，此數值不降，大資金就不敢定價寬鬆週期。</div>", invert_color=True, suffix="%", pr_type='C')
-
+    with c1: draw_trend_card(df, "Unemployment_Rate", "美國失業率", ..., invert_color=True, suffix="%", pr_type='C', is_macro=True)
+    # === 替換原本的薩姆規則區塊 ===
+    with c2: 
+        sahm_val = df['Sahm_Indicator'].dropna().iloc[-1] if 'Sahm_Indicator' in df.columns else 0
+        sahm_distance = 0.5 - sahm_val
+        sahm_status = f"<span style='color:#EF4444; font-weight:bold;'>還差 {sahm_distance:.2f}%</span>" if sahm_distance > 0 else "<span style='color:#EF4444; font-weight:bold;'>🚨 已觸發衰退</span>"
+        sahm_desc = f"<div style='font-size:0.8rem; line-height:1.5;'><b>🧮 公式：</b>失業率3個月均值與前低比較。<br><b>📊 閾值：</b>> 0.5% 即宣告 100% 衰退。<br><b>⏱️ 距離觸發：</b>{sahm_status}</div>"
+        
+        # 注意這裡加上了 is_macro=True
+        draw_trend_card(df, "Sahm_Indicator", "薩姆衰退指標", sahm_desc, invert_color=True, suffix="%", pr_type='C', is_macro=True)
+    with c3: draw_trend_card(df, "Core_PCE_YoY", "核心 PCE 年增率", ..., invert_color=True, suffix="%", pr_type='C', is_macro=True)
 if __name__ == "__main__":
     main()
