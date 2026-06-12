@@ -400,46 +400,23 @@ def main():
     with t2: draw_trend_card(df, "HY_Spread_Chg_5D", "垃圾債利差 5 日變化", "華爾街銀行借錢意願的短期指標。<br><span style='color:#0284C7;'><b>💡：</b>數字大於0 (正數) 代表銀行在雨天收傘，體質差的公司借不到錢，股市隨時有連環爆雷風險。</span>", invert_color=True, suffix="%", ma_window=20, pr_type='C')
     with t3: draw_trend_card(df, "VIX_Dev_20D", "VIX 距月線乖離 (情緒偏斜)", "短期恐慌與貪婪的極端值。<br><span style='color:#0284C7;'><b>💡：</b>大於 +15% 代表市場嚇壞了(通常是短線買點)；小於 -15% 代表大家過度樂觀，準備要被割韭菜了。</span>", invert_color=True, suffix="%", ma_window=20, pr_type='C')
     
-    # === 🟢 新增：價值投資估值防線 ===
+    # === 🟢 替換：聯準會底層流動性與資產負債表 (真正驅動美股的引擎) ===
     st.divider()
-    st.subheader("⚖️ 價值投資估值防線 (動態本益比)")
-    val_data = fetch_valuation_data()
-    v1, v2, v3 = st.columns(3)
+    st.subheader("🚰 聯準會真實資金水位 (Net Liquidity)")
+    st.markdown("華爾街不看本益比，只看『印鈔機』。美股的漲跌趨勢，高度貼合聯準會與財政部釋放的【淨流動性】。")
     
-    for i, (col, (name, metrics)) in enumerate(zip([v1, v2, v3], val_data.items())):
-        with col:
-            pe = metrics['PE']
-            fwd_pe = metrics['Fwd_PE']
-            
-            if pe == 0:
-                pe_status = "數據暫缺"
-                status_color = "#64748B"
-            else:
-                if pe > 30: pe_status, status_color = "估值偏高 (警戒)", COLORS['red']
-                elif pe < 20: pe_status, status_color = "估值便宜 (買點)", COLORS['emerald']
-                else: pe_status, status_color = "估值合理", COLORS['amber']
-            
-            fwd_status = "預估獲利將成長 🚀" if fwd_pe > 0 and fwd_pe < pe else "預估獲利放緩 ⚠️" if fwd_pe > pe else "預估持平"
-            
-            st.markdown(f"""
-            <div style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 15px;">
-                <div style="font-size: 1.05rem; font-weight: 800; color: #0F172A; margin-bottom: 10px;">{name}</div>
-                <div style="display: flex; justify-content: space-between; align-items: flex-end;">
-                    <div>
-                        <div style="font-size: 0.8rem; color: #64748B; font-weight: bold;">當前本益比 (Trailing P/E)</div>
-                        <div style="font-size: 1.8rem; font-weight: 900; color: {COLORS['ink']}; line-height: 1.2;">{pe:.1f}</div>
-                    </div>
-                    <div style="text-align: right;">
-                        <div style="font-size: 0.8rem; color: #64748B; font-weight: bold;">預估本益比 (Forward)</div>
-                        <div style="font-size: 1.2rem; font-weight: 700; color: #3B82F6;">{fwd_pe:.1f}</div>
-                    </div>
-                </div>
-                <div style="margin-top: 10px; padding-top: 10px; border-top: 1px dashed #CBD5E1; display: flex; justify-content: space-between; font-size: 0.85rem;">
-                    <span style="color: {status_color}; font-weight: bold;">{pe_status}</span>
-                    <span style="color: #475569;">{fwd_status}</span>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+    # 將百萬美元轉換為「兆美元 (Trillion)」方便閱讀
+    if 'Total_Assets' in df.columns: df['Total_Assets_T'] = df['Total_Assets'] / 1e6
+    if 'TGA_Account' in df.columns: df['TGA_Account_T'] = df['TGA_Account'] / 1e6
+    if 'Net_Liquidity' in df.columns: df['Net_Liquidity_T'] = df['Net_Liquidity'] / 1e6
+
+    v1, v2, v3 = st.columns(3)
+    with v1: 
+        draw_trend_card(df, "Total_Assets_T", "聯準會總資產 (QT/QE)", "<div style='font-size:0.8rem; line-height:1.5;'><b>🧮 公式：</b>Fed 釋放的基礎貨幣總量。<br><b>📊 趨勢：</b>上升=印鈔(QE)；下降=縮表抽資金(QT)。<br><b>⚔️ 連動：</b>若持續下降，代表長線資金正在被抽乾，風險資產的估值天花板會被無情壓抑。</div>", suffix=" 兆", pr_type='C', is_macro=True)
+    with v2: 
+        draw_trend_card(df, "TGA_Account_T", "財政部 TGA 帳戶", "<div style='font-size:0.8rem; line-height:1.5;'><b>🧮 公式：</b>美國政府的國庫支票簿。<br><b>📊 趨勢：</b>下降=政府花錢(注資)；上升=抽稅發債(吸血)。<br><b>⚔️ 連動：</b>當 TGA 快速飆高時，市場上的游資會被瞬間吸乾，通常伴隨美股短線急跌。</div>", invert_color=True, suffix=" 兆", pr_type='C', is_macro=True)
+    with v3: 
+        draw_trend_card(df, "Net_Liquidity_T", "市場淨流動性 (美股動能)", "<div style='font-size:0.8rem; line-height:1.5;'><b>🧮 公式：</b>總資產 - TGA - ON RRP。<br><b>📊 趨勢：</b>美股大盤(SPY)的真正地心引力。<br><b>⚔️ 連動：</b>當淨流動性強勢擴張，閉著眼睛買都會漲；當淨流動性萎縮，基本面再好都會面臨估值下修。</div>", suffix=" 兆", pr_type='C', is_macro=True)
 
     st.divider()
     st.subheader("🔥 賽道擁擠度與泡沫雷達 (半導體過熱警報)")

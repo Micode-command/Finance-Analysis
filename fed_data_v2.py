@@ -249,27 +249,32 @@ def generate_ai_summary(df, api_key=None):
         base_result["error"] = "請在 Streamlit Secrets 設定 GEMINI_API_KEY"
         return base_result
     
+    # === 🟢 擷取高頻戰術數據與聯準會流動性 ===
     usdtwd_roc_5d = df_secure['USDTWD_ROC_5D'].dropna().iloc[-1] if 'USDTWD_ROC_5D' in df_secure.columns else 0.0
     hy_chg_5d = df_secure['HY_Spread_Chg_5D'].dropna().iloc[-1] if 'HY_Spread_Chg_5D' in df_secure.columns else 0.0
     vix_dev_20d = df_secure['VIX_Dev_20D'].dropna().iloc[-1] if 'VIX_Dev_20D' in df_secure.columns else 0.0
+    # 新增：抓取淨流動性 4 週動能
+    liq_roc_4w = df_secure['Liquidity_ROC_4W'].dropna().iloc[-1] if 'Liquidity_ROC_4W' in df_secure.columns else 0.0
 
     data_summary = (
         f"數據日期: {df_secure.index[-1].strftime('%Y-%m-%d')}\n"
         f"- VIX 恐慌指數 PR: {pr.get('VIX_PR', 0):.1f} | 巴菲特指標 PR: {pr.get('Buffett_PR', 50):.1f}\n"
+        f"- 聯準會淨流動性(4週動能): {liq_roc_4w:+.2f}%\n" # 🟢 餵給 AI 最核心的底層活水數據
         f"- 外資生死線(台幣5日動能): {usdtwd_roc_5d:+.2f}%\n"
         f"- 信用利差動態(5日變化): {hy_chg_5d:+.2f}%\n"
         f"- 選擇權情緒(VIX乖離): {vix_dev_20d:+.2f}%\n"
     )
 
+    # === 🟢 升級 AI 提示詞 (強制要求解讀抽銀根/放水) ===
     system_prompt_raw = """
     你是一位擁有 30 年經驗的總經量化投資大師。請為穩健型高階半導體產業客戶規劃資產配置。
     【🚨 輸出要求】JSON 的 Value 內【絕對禁止】真實換行符號。
     {
-        "macro_phase_insight": "【當前經濟階段與今日驅動】",
-        "broadcast": "<h4 style='color:#0044CC; margin-bottom: 5px;'>🏦 總經定調</h4><ul style='line-height: 1.8; margin-top: 0;'><li><b>高頻籌碼與匯率：</b>(解讀台幣5日動能與VIX乖離)</li></ul>",
+        "macro_phase_insight": "【當前經濟階段與今日驅動】(請綜合評估通膨、聯準會淨流動性動能與台幣匯率給出大方向。若流動性急縮，務必提出警告)",
+        "broadcast": "<h4 style='color:#0044CC; margin-bottom: 5px;'>🏦 總經定調</h4><ul style='line-height: 1.8; margin-top: 0;'><li><b>聯準會水龍頭與籌碼：</b>(解讀聯準會淨流動性4週動能，判斷是偷偷放水還是抽銀根，並結合VIX與台幣給出短線警示)</li></ul>",
         "allocation_recommendation": {"twd_cash": 15, "usd_assets": 30, "cashflow": 25, "core_growth": 15, "tactical_hedge": 15},
         "allocation_reasons": {"twd_cash": "保留現金", "usd_assets": "鎖定高息", "cashflow": "00937B 提供被動收入", "core_growth": "采鈺等核心持股", "tactical_hedge": "極小部位短打矽光子/AI強勢股"},
-        "market_insights_html": "<div><h4 style='color: #0284C7;'>🔄 未來一週操作劇本</h4><p>(分析高頻指標)</p><h4 style='color: #F59E0B;'>🔥 科技股熱點</h4><p>(帶入 AI、矽光子CPO、CoWoS)</p></div>"
+        "market_insights_html": "<div><h4 style='color: #0284C7;'>🔄 未來一週操作劇本</h4><p>(分析高頻指標與流動性抽水/放水的應對)</p><h4 style='color: #F59E0B;'>🔥 科技股熱點</h4><p>(帶入 AI、矽光子CPO、CoWoS，但若流動性吃緊則強烈建議防禦)</p></div>"
     }
     """
 
