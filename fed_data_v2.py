@@ -40,14 +40,9 @@ YF_TICKERS = {
 }
 FRED_OBS_URL = "https://api.stlouisfed.org/fred/series/observations"
 
-# ==========================================
-# 2. 資料抓取模組
-# ==========================================
 def _fetch_single_series(col_name, series_id, in_billions, observation_start, key):
-# ==========================================
-
     try:
-        # 🟢 疊加邏輯：動態指派 API 參數。若為通膨指標，直接請 FRED 回傳「年增率 (pc1)」
+        # 🟢 疊加邏輯：動態指派 API 參數
         api_params = {
             "series_id": series_id, 
             "api_key": key, 
@@ -56,18 +51,35 @@ def _fetch_single_series(col_name, series_id, in_billions, observation_start, ke
             "observation_start": observation_start
         }
         
-        # 核心改動：CPI 與 Core_PCE 需要看 YoY (年增率)，透過 FRED 轉換可避免日/月資料合併後的計算失真
+        # 核心改動：CPI 與 Core_PCE 需要看 YoY (年增率)
         if col_name in ["CPI", "Core_PCE"]:
             api_params["units"] = "pc1"
 
         r = requests.get(
-            FRED_OBS_URL,
+            "https://api.stlouisfed.org/fred/series/observations",
             params=api_params,
             timeout=15,
         )
         r.raise_for_status()
         obs = r.json().get("observations", [])
-# ==========================================
+        if not obs: return None
+        
+        rows = []
+        for o in obs:
+            val = o.get("value")
+            if val in (".", None, ""): continue
+            try: val = float(val)
+            except (TypeError, ValueError): continue
+            if in_billions: val = val * 1000
+            rows.append({"date": o["date"], col_name: val})
+            
+        if rows:
+            df_one = pd.DataFrame(rows)
+            df_one["date"] = pd.to_datetime(df_one["date"])
+            return df_one.set_index("date")
+    except Exception as e:
+        print(f"⚠️ FRED API 抓取失敗 [{col_name}]: {e}")
+        return None
 
 def fetch_fed_data(api_key=None, years_back=10):
     key = api_key or os.environ.get("FRED_API_KEY")
